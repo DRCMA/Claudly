@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "557429013068",
+    "project_id": "dlauapp",
+    "storage_bucket": "dlauapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:557429013068:android:5d0f437aa0adaa142792e9",
+        "android_client_info": {
+          "package_name": "com.example.app_dlau"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "557429013068-gre1bv27ul3kdtvmd2jprms0op5coo3r.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.app_dlau",
+            "certificate_hash": "1b02f5c3a2240315bda76948ff1c30e8195ec196"
+          }
+        },
+        {
+          "client_id": "557429013068-qfaj0eavicklithapd3224u3gu2kq6s3.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyARKkhnxxc_o0Too6WKtlnG6L2wKrBrGWM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "557429013068-qfaj0eavicklithapd3224u3gu2kq6s3.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "557429013068-qrkcjddmk7ks34khc9bgbf3lpbig52tu.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.appDlau"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

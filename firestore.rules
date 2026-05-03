@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 1. REGLAS PARA DIARIOS
+    match /diarios/{diarioId} {
+      // Lectura: Permitida si es público, si eres colaborador, O si eres el dueño (userId)
+      allow read: if request.auth != null && (
+        resource.data.publico == true || 
+        request.auth.uid in resource.data.colaboradores ||
+        resource.data.userId == request.auth.uid
+      );
+
+      // Creación: Solo si el usuario está autenticado
+      allow create: if request.auth != null;
+
+      // Actualización: Solo si eres colaborador o el dueño
+      allow update: if request.auth != null && (
+        request.auth.uid in resource.data.colaboradores || 
+        resource.data.userId == request.auth.uid
+      );
+
+      // Borrado: Solo el dueño puede borrarlo manualmente. 
+      // (Nota: La Cloud Function usa permisos de Admin, así que estas reglas no le afectan a ella)
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+
+      // 2. SUBCOLECCIÓN DE RECUERDOS
+      // Hereda el acceso: si puedes leer el diario, puedes leer sus recuerdos
+      match /recuerdos/{recuerdoId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+
+    // 3. COLECCIÓN DE USUARIOS
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+      
+      match /amigos/{amigoId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+
+    // 4. SOLICITUDES (Muro, Amistad, etc.)
+    match /solicitudes/{docId} { allow read, write: if request.auth != null; }
+    match /solicitudes_diario/{docId} { allow read, write: if request.auth != null; }
+    match /muro/{postId} {
+      allow read, create: if request.auth != null;
+      allow update, delete: if request.auth != null && 
+        (request.resource.data.autorId == request.auth.uid || resource.data.autorId == request.auth.uid);
+    }
+  }
+}
