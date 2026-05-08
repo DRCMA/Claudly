@@ -33,6 +33,20 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
     super.initState();
     _formatearFechaUnion();
     _inicializarPerfil();
+    // Listener manual: fuerza setState aunque la tab esté en keepAlive
+    ConfigController.darkModeListenable.addListener(_onDarkModeChanged);
+  }
+
+  void _onDarkModeChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    ConfigController.darkModeListenable.removeListener(_onDarkModeChanged);
+    _moteController.dispose();
+    _bioController.dispose();
+    super.dispose();
   }
 
   void _formatearFechaUnion() {
@@ -56,12 +70,12 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
       final snapshot = await userDoc.get();
       if (!snapshot.exists) {
         String moteInicial = currentUser.displayName ?? 
-    "Invitado ${currentUser.uid.substring(currentUser.uid.length - 4).toUpperCase()}";
+            "Invitado ${currentUser.uid.substring(currentUser.uid.length - 4).toUpperCase()}";
         String idPub = currentUser.uid.length >= 6 
             ? currentUser.uid.substring(0, 6).toUpperCase() 
             : "USER${currentUser.uid.length}";
         await userDoc.set({
-          'mote': currentUser.displayName ?? "Nuevo Usuario",
+          'mote': moteInicial,
           'email': currentUser.email,
           'photoURL': currentUser.photoURL ?? "",
           'idPublico': idPub,
@@ -84,13 +98,10 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
       if (doc.exists && mounted) {
         final data = doc.data() as Map<String, dynamic>;
         setState(() {
-          if (_moteController.text != data['mote']) {
-            _moteController.text = data['mote'] ?? user?.displayName ?? "Invitado";
-          }
-          if (_bioController.text != data['bio']) {
-            _bioController.text = data['bio'] ?? "";
-          }
-          _generoSeleccionado = data['genero'] ?? "Hombre";
+          _moteController.text = data['mote'] ?? "";
+          _bioController.text = data['bio'] ?? "";
+          String generoDb = data['genero'] ?? "Hombre";
+          _generoSeleccionado = _generos.contains(generoDb) ? generoDb : "Hombre";
           if (data['fechaNac'] != null) {
             _fechaNacimiento = (data['fechaNac'] as Timestamp).toDate();
           }
@@ -109,18 +120,15 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
         'bio': _bioController.text.trim(),
         'genero': _generoSeleccionado,
         'fechaNac': Timestamp.fromDate(_fechaNacimiento),
-        'photoURL': user!.photoURL ?? "",
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-    content: const Text("Configuración guardada"),
-    behavior: SnackBarBehavior.floating, // <--- ESTO lo hace flotar
-    margin: const EdgeInsets.only(bottom: 80, left: 20, right: 20), // <--- Lo eleva sobre la Bar
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    backgroundColor: Colors.indigo,
-    duration: const Duration(seconds: 2),
-  ),
+            content: const Text("Perfil actualizado con éxito"),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.only(bottom: 90, left: 20, right: 20),
+            backgroundColor: Colors.green[700],
+          ),
         );
       }
     } catch (e) {
@@ -132,13 +140,14 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF3E2723),
+        backgroundColor: ConfigController.getBrownDark(),
         title: const Text("Cerrar Sesión", style: TextStyle(color: Colors.white)),
-        content:  Text("¿Estás seguro de que quieres salir de tu diario?", style: TextStyle(fontSize: ConfigController.getAdaptedSize(18), color: Colors.white70)),
+        content: Text("¿Quieres salir de tu diario?", 
+            style: TextStyle(color: Colors.white70, fontSize: ConfigController.getAdaptedSize(16))),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: Text("CANCELAR", style: TextStyle(fontSize: ConfigController.getAdaptedSize(18), color: Colors.white54)),
+            child: const Text("CANCELAR", style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
@@ -146,7 +155,7 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
               Navigator.pop(dialogContext);
               _authService.logout(); 
             },
-            child: Text("SALIR", style: TextStyle(fontSize: ConfigController.getAdaptedSize(18), color: Colors.white)),
+            child: const Text("SALIR", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -159,8 +168,21 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
       initialDate: _fechaNacimiento,
       firstDate: DateTime(1920),
       lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.dark(
+              primary: const Color(0xFFFFD54F),
+              onPrimary: Colors.black,
+              surface: ConfigController.getBrownDark(),
+              onSurface: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
-    if (picked != null && picked != _fechaNacimiento) {
+    if (picked != null) {
       setState(() => _fechaNacimiento = picked);
     }
   }
@@ -168,8 +190,11 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
   @override
   Widget build(BuildContext context) {
     super.build(context);
-
     if (user == null) return const Center(child: CircularProgressIndicator());
+
+    // isDarkMode se lee en cada build — el listener manual de initState
+    // garantiza que build se llame cuando cambia, incluso con keepAlive.
+    final bool isDark = ConfigController.isDarkMode;
 
     final mainTextStyle = TextStyle(
       color: Colors.white, 
@@ -177,136 +202,148 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
       fontFamily: 'Georgia'
     );
 
-    // Usamos el Wrapper para mantener la estética de cartón/scrapbook
     return ScrapbookWrapper(
-      child: Stack(
-        children: [
-          SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildBrownCard(
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 35,
-                        backgroundColor: Colors.white10,
-                        backgroundImage: (user!.photoURL != null) ? NetworkImage(user!.photoURL!) : null,
-                        child: (user!.photoURL == null) ? const Icon(Icons.person, size: 35, color: Colors.white54) : null,
-                      ),
-                      const SizedBox(width: 15),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildEtiqueta("mote:"),
-                            TextField(
-      controller: _moteController,
-      style: mainTextStyle.copyWith(
-        fontSize: ConfigController.getAdaptedSize(18), 
-        fontWeight: FontWeight.bold
-      ),
-      decoration: const InputDecoration(
-        isDense: true,
-        contentPadding: EdgeInsets.symmetric(vertical: 4),
-        border: InputBorder.none,
-        hintText: "Tu mote...",
-        hintStyle: TextStyle(color: Colors.white24),
-      ),
-      onChanged: (value) {
-        // Esto asegura que si usas el valor en otros lados, se actualice la UI
-        setState(() {}); 
-      },
-    ),
-                            _buildEtiqueta("correo:"),
-                            Text(user?.email ?? "", style: mainTextStyle.copyWith(fontSize: 14, color: Colors.white70)),
-                          ],
+      isDarkMode: isDark,
+      child: Scaffold(
+        backgroundColor: ConfigController.getPageBgColor(),
+        body: Stack(
+          children: [
+            SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // --- TARJETA DE PERFIL ---
+                  _buildBrownCard(
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 35,
+                          backgroundColor: Colors.white10,
+                          backgroundImage: (user!.photoURL != null) ? NetworkImage(user!.photoURL!) : null,
+                          child: (user!.photoURL == null) ? const Icon(Icons.person, size: 35, color: Colors.white54) : null,
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 15),
-                _buildBrownCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildEtiqueta("sobre mí:"),
-                      TextField(
-                        controller: _bioController,
-                        maxLines: 2,
-                        style: mainTextStyle,
-                        decoration: const InputDecoration(
-                          border: InputBorder.none, 
-                          hintText: "Escribe algo aquí...", 
-                          hintStyle: TextStyle(color: Colors.white24)
+                        const SizedBox(width: 15),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildEtiqueta("mote:"),
+                              TextField(
+                                controller: _moteController,
+                                style: mainTextStyle.copyWith(fontWeight: FontWeight.bold),
+                                decoration: const InputDecoration(
+                                  isDense: true, 
+                                  border: InputBorder.none, 
+                                  hintText: "Tu mote...", 
+                                  hintStyle: TextStyle(color: Colors.white24)
+                                ),
+                              ),
+                              _buildEtiqueta("correo:"),
+                              Text(user?.email ?? "", style: mainTextStyle.copyWith(fontSize: 14, color: Colors.white70)),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 15),
-                _buildBrownCard(
-                  child: Column(
-                    children: [
-                      _buildDataRow(
-                        label: "nacimiento:",
-                        value: "${_fechaNacimiento.year}",
-                        icon: Icons.calendar_today,
-                        onTap: _seleccionarFecha,
-                      ),
-                      const Divider(color: Colors.white10, height: 20),
-                      _buildDropdownGenero(),
-                      const Divider(color: Colors.white10, height: 20),
-                      _buildDataRow(
-                        label: "miembro desde:",
-                        value: _fechaUnion,
-                        icon: Icons.auto_awesome_outlined,
-                      ),
-                    ],
+                  const SizedBox(height: 15),
+
+                  // --- TARJETA SOBRE MÍ ---
+                  _buildBrownCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildEtiqueta("sobre mí:"),
+                        TextField(
+                          controller: _bioController,
+                          maxLines: 2,
+                          style: mainTextStyle,
+                          decoration: const InputDecoration(
+                            border: InputBorder.none, 
+                            hintText: "Escribe algo aquí...", 
+                            hintStyle: TextStyle(color: Colors.white24)
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 15),
-                _buildBrownCard(
-                  onTap: _confirmarCierreSesion,
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.power_settings_new, color: Colors.redAccent, size: 20),
-                      SizedBox(width: 10),
-                      Text("CERRAR SESIÓN", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-                    ],
+                  const SizedBox(height: 15),
+
+                  // --- TARJETA DATOS ---
+                  _buildBrownCard(
+                    child: Column(
+                      children: [
+                        _buildDataRow(
+                          label: "nacimiento:", 
+                          value: "${_fechaNacimiento.year}", 
+                          icon: Icons.calendar_today, 
+                          onTap: _seleccionarFecha
+                        ),
+                        const Divider(color: Colors.white10, height: 20),
+                        _buildDropdownGenero(),
+                        const Divider(color: Colors.white10, height: 20),
+                        _buildDataRow(
+                          label: "miembro desde:", 
+                          value: _fechaUnion, 
+                          icon: Icons.auto_awesome_outlined
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 100),
-              ],
-            ),
-          ),
-          Positioned(
-            bottom: 25,
-            right: 20,
-            child: ElevatedButton(
-              onPressed: _guardarPerfil,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1A237E),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  const SizedBox(height: 15),
+
+                  // --- BOTÓN CERRAR SESIÓN ---
+                  _buildBrownCard(
+                    onTap: _confirmarCierreSesion,
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.power_settings_new, color: Colors.redAccent, size: 20),
+                        SizedBox(width: 10),
+                        Text("CERRAR SESIÓN", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 100),
+                ],
               ),
-              child: const Text("GUARDAR", style: TextStyle(color: Colors.white)),
             ),
-          ),
-        ],
+
+            // --- BOTÓN GUARDAR ---
+            Positioned(
+              bottom: 25,
+              right: 20,
+              child: ElevatedButton(
+                onPressed: _guardarPerfil,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1A237E),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  elevation: 4,
+                ),
+                child: const Text("GUARDAR", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // --- MÉTODOS BUILDER (Igual que antes) ---
   Widget _buildBrownCard({required Widget child, VoidCallback? onTap}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: const Color(0xFF3E2723), borderRadius: BorderRadius.circular(8)),
+        decoration: BoxDecoration(
+          color: ConfigController.getBrownDark(),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            if (!ConfigController.isDarkMode)
+              BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2))
+          ]
+        ),
         child: child,
       ),
     );
@@ -321,7 +358,10 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
       onTap: onTap,
       child: Row(
         children: [
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_buildEtiqueta(label), Text(value, style: const TextStyle(color: Colors.white, fontFamily: 'Georgia'))])),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _buildEtiqueta(label), 
+            Text(value, style: const TextStyle(color: Colors.white, fontFamily: 'Georgia'))
+          ])),
           Icon(icon, color: Colors.white24, size: 18)
         ],
       ),
@@ -336,7 +376,7 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
         DropdownButton<String>(
           value: _generoSeleccionado,
           isExpanded: true,
-          dropdownColor: const Color(0xFF3E2723),
+          dropdownColor: ConfigController.getBrownDark(), 
           style: const TextStyle(color: Colors.white, fontFamily: 'Georgia'),
           underline: Container(),
           items: _generos.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),

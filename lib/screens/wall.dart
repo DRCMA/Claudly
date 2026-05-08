@@ -40,155 +40,201 @@ class _WallPageState extends State<WallPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return ScrapbookWrapper(
-      floatingActionButton: FloatingActionButton(
-        heroTag: "btn_wall_post",
-        backgroundColor: Colors.indigo,
-        child: const Icon(Icons.add_comment, color: Colors.white),
-        onPressed: () => _mostrarDialogoPost(context),
-      ),
-      child: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('muro')
-            .orderBy('timestamp', descending: true)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) return const Center(child: Text("Error al cargar muro"));
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+Widget build(BuildContext context) {
+  // 1. Detectamos el modo oscuro actual desde el controlador estático
+  final bool isDarkMode = ConfigController.isDarkMode;
 
-          final docs = snapshot.data!.docs;
-          if (docs.isEmpty) return const Center(child: Text("El muro está vacío..."));
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(15),
-            itemCount: docs.length,
-            itemBuilder: (context, index) {
-              final docId = docs[index].id;
-              var data = docs[index].data() as Map<String, dynamic>;
-              
-              bool isAdmin = data['tipo'] == 'administrador';
-              bool esMio = data['autorId'] == miId;
-              List<dynamic> likes = data['likes'] ?? [];
-              bool leDiLike = likes.contains(miId);
-
-              // --- 3. Lógica de borrado a las 48 horas ---
-              Timestamp? ts = data['timestamp'] as Timestamp?;
-              if (ts != null) {
-                final diferencia = DateTime.now().difference(ts.toDate());
-                if (diferencia.inHours >= 48) {
-                  // Si tiene más de 48h y es mío, lo borro de la DB
-                  if (esMio) {
-                    FirebaseFirestore.instance.collection('muro').doc(docId).delete();
-                  }
-                  // No lo mostramos visualmente
-                  return const SizedBox.shrink();
-                }
-              }
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: 15),
-                padding: const EdgeInsets.all(18),
-                // --- 4. Estética de administrador vs usuario ---
-                decoration: isAdmin 
-                    ? BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.6), // Semitransparente
-                        borderRadius: BorderRadius.circular(25), // Muy redondeado
-                        border: Border.all(color: Colors.white30),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 10,
-                            offset: const Offset(0, 5)
-                          )
-                        ],
-                      )
-                    : BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.95),
-                        borderRadius: BorderRadius.circular(4), // Cuadrado como estaba
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 4,
-                            offset: const Offset(2, 3)
-                          )
-                        ],
-                      ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          // Añadimos el "(yo)" si es nuestro mensaje[cite: 4]
-                          esMio 
-                            ? "${data['autor']} (yo)".toUpperCase() 
-                            : (data['autor']?.toString().toUpperCase() ?? "ANÓNIMO"),
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: ConfigController.getAdaptedSize(11),
-                            letterSpacing: 1,
-                            // Aplicamos el color aleatorio o índigo si somos nosotros
-                            color: _getColor(data['autorId'] ?? "", esMio),
-                          ),
-                        ),
-                        const Spacer(),
-                        // Estrellita de Like si no es nuestro mensaje
-                        if (!esMio)
-                          InkWell(
-                            onTap: () => _toggleLike(docId, likes),
-                            child: Icon(
-                              leDiLike ? Icons.star : Icons.star_border, 
-                              size: 20, 
-                              color: leDiLike ? Colors.amber : Colors.black26
-                            ),
-                          ),
-                        if (!esMio) const SizedBox(width: 8),
-                        if (esMio)
-                          InkWell(
-                            onTap: () => _confirmarEliminarMensaje(docId),
-                            child: const Icon(Icons.close, size: 16, color: Colors.black26),
-                          ),
-                      ],
-                    ),
-                    const Divider(height: 20, thickness: 0.5),
-                    Text(
-                      data['mensaje'] ?? "",
-                      style: TextStyle(
-                        fontSize: ConfigController.fontSize - 2,
-                        fontFamily: isAdmin ? 'Roboto' : 'Georgia', // Diferenciamos la fuente si quieres
-                        fontStyle: isAdmin ? FontStyle.italic : FontStyle.normal,
-                        height: 1.4,
-                        color: isAdmin ? Colors.black87 : Colors.black,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Contador de likes pequeño (Opcional)
-                        likes.isNotEmpty 
-                          ? Text("${likes.length} ⭐", style: const TextStyle(fontSize: 10, color: Colors.amber))
-                          : const SizedBox.shrink(),
-                        Text(
-                          _formatearFecha(ts),
-                          style: TextStyle(
-                            fontSize: ConfigController.getAdaptedSize(9), 
-                            color: Colors.black38, 
-                            fontStyle: FontStyle.italic
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              );
-            },
+  return ScrapbookWrapper(
+    // Pasamos el estado al wrapper para que el fondo de papel cambie
+    isDarkMode: isDarkMode, 
+    floatingActionButton: FloatingActionButton(
+      heroTag: "btn_wall_post",
+      backgroundColor: Colors.indigo,
+      child: const Icon(Icons.add_comment, color: Colors.white),
+      onPressed: () => _mostrarDialogoPost(context),
+    ),
+    child: Scaffold(
+      backgroundColor: ConfigController.getPageBgColor(),
+    body: StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('muro')
+          .orderBy('timestamp', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              "Error al cargar muro",
+              style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black54),
+            ),
           );
-        },
-      ),
-    );
-  }
+        }
+        
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+
+        final docs = snapshot.data!.docs;
+
+        // --- 2. LÓGICA DE MURO VACÍO ---
+        if (docs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons. auto_awesome, // Un icono que pegue con el estilo
+              size: 80,
+              color: ConfigController.getTextColor().withValues(alpha: 0.2),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "No hay nada de momento...",
+              style: TextStyle(
+                fontFamily: 'Georgia',
+                fontSize: ConfigController.getAdaptedSize(18),
+                color: ConfigController.getTextColor().withValues(alpha: 0.5),
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(15),
+          itemCount: docs.length,
+          itemBuilder: (context, index) {
+            final docId = docs[index].id;
+            var data = docs[index].data() as Map<String, dynamic>;
+            
+            bool isAdmin = data['tipo'] == 'administrador';
+            bool esMio = data['autorId'] == miId;
+            List<dynamic> likes = data['likes'] ?? [];
+            bool leDiLike = likes.contains(miId);
+
+            // --- 3. Lógica de borrado a las 48 horas ---
+            Timestamp? ts = data['timestamp'] as Timestamp?;
+            if (ts != null) {
+              final diferencia = DateTime.now().difference(ts.toDate());
+              if (diferencia.inHours >= 48) {
+                if (esMio) {
+                  FirebaseFirestore.instance.collection('muro').doc(docId).delete();
+                }
+                return const SizedBox.shrink();
+              }
+            }
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 15),
+              padding: const EdgeInsets.all(18),
+              // --- 4. Estética adaptable al Modo Oscuro ---
+              decoration: isAdmin 
+                  ? BoxDecoration(
+                      // En modo oscuro, usamos un gris muy oscuro semitransparente
+                      color: isDarkMode 
+                          ? Colors.white.withValues(alpha: 0.1) 
+                          : Colors.white.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(25),
+                      border: Border.all(
+                        color: isDarkMode ? Colors.white10 : Colors.white30
+                      ),
+                    )
+                  : BoxDecoration(
+                      // El post estándar cambia de blanco a gris oscuro
+                      color: isDarkMode 
+                          ? Colors.grey[900]!.withValues(alpha: 0.95) 
+                          : Colors.white.withValues(alpha: 0.95),
+                      borderRadius: BorderRadius.circular(4),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: isDarkMode ? 0.3 : 0.1),
+                          blurRadius: 4,
+                          offset: const Offset(2, 3)
+                        )
+                      ],
+                    ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        esMio 
+                          ? "${data['autor']} (yo)".toUpperCase() 
+                          : (data['autor']?.toString().toUpperCase() ?? "ANÓNIMO"),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: ConfigController.getAdaptedSize(11),
+                          letterSpacing: 1,
+                          // Si es modo oscuro, aclaramos los colores de los nombres
+                          color: _getColor(data['autorId'] ?? "", esMio).withValues(
+                            alpha: isDarkMode ? 0.9 : 1.0
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      if (!esMio)
+                        InkWell(
+                          onTap: () => _toggleLike(docId, likes),
+                          child: Icon(
+                            leDiLike ? Icons.star : Icons.star_border, 
+                            size: 20, 
+                            color: leDiLike 
+                                ? Colors.amber 
+                                : (isDarkMode ? Colors.white24 : Colors.black26)
+                          ),
+                        ),
+                      if (!esMio) const SizedBox(width: 8),
+                      if (esMio)
+                        InkWell(
+                          onTap: () => _confirmarEliminarMensaje(docId),
+                          child: Icon(
+                            Icons.close, 
+                            size: 16, 
+                            color: isDarkMode ? Colors.white38 : Colors.black26
+                          ),
+                        ),
+                    ],
+                  ),
+                  const Divider(height: 20, thickness: 0.5),
+                  Text(
+                    data['mensaje'] ?? "",
+                    style: TextStyle(
+                      fontSize: ConfigController.fontSize - 2,
+                      fontFamily: isAdmin ? 'Roboto' : 'Georgia',
+                      fontStyle: isAdmin ? FontStyle.italic : FontStyle.normal,
+                      height: 1.4,
+                      // Texto blanco en modo oscuro, negro en modo claro
+                      color: isDarkMode ? Colors.white : Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      likes.isNotEmpty 
+                        ? Text("${likes.length} ⭐", style: const TextStyle(fontSize: 10, color: Colors.amber))
+                        : const SizedBox.shrink(),
+                      Text(
+                        _formatearFecha(ts),
+                        style: TextStyle(
+                          fontSize: ConfigController.getAdaptedSize(9), 
+                          color: isDarkMode ? Colors.white38 : Colors.black38, 
+                          fontStyle: FontStyle.italic
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    ),
+  ),
+  );
+}
 
   String _formatearFecha(Timestamp? ts) {
     if (ts == null) return "Ahora";

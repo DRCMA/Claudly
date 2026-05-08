@@ -5,13 +5,14 @@ import 'firebase_options.dart';
 import "services/config_controller.dart";
 import 'screens/home.dart';
 import 'package:intl/date_symbol_data_local.dart';
-// IMPORTANTE: Estos dos son necesarios para el idioma
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
 
 void main() async {
+  // Solo llamamos al método sin asignar la variable si no la vamos a usar.
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Bloqueamos la orientación
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -20,13 +21,13 @@ void main() async {
   // 1. Inicialización de Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // 2. CONFIGURACIÓN PARA AHORRO DE ANCHO DE BANDA (Firestore Cache)
+  // 2. Configuración de persistencia de Firestore
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
 
-  // 3. Cargas de configuración e inicialización de fecha en español
+  // 3. Cargas paralelas de configuración
   await Future.wait([
     ConfigController.cargarConfiguracion(),
     initializeDateFormatting('es', null),
@@ -35,8 +36,22 @@ void main() async {
   runApp(const MiDiarioApp());
 }
 
-class MiDiarioApp extends StatelessWidget {
+class MiDiarioApp extends StatefulWidget {
   const MiDiarioApp({super.key});
+
+  // Método estático para refrescar desde cualquier parte de la app
+  static void refresh(BuildContext context) {
+    context.findAncestorStateOfType<_MiDiarioAppState>()?.refrescar();
+  }
+
+  @override
+  State<MiDiarioApp> createState() => _MiDiarioAppState();
+}
+
+class _MiDiarioAppState extends State<MiDiarioApp> {
+  void refrescar() {
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,29 +59,33 @@ class MiDiarioApp extends StatelessWidget {
       title: 'Claud',
       debugShowCheckedModeBanner: false,
 
-      // --- CONFIGURACIÓN DE IDIOMA (LOCALIZATION) ---
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [
-        Locale('es', 'ES'), // Español
-        Locale('en', 'US'), // Inglés
+        Locale('es', 'ES'),
+        Locale('en', 'US'),
+        Locale('ca', 'ES'),
       ],
-      locale: const Locale('es', 'ES'), // Forzamos el idioma a español
-      // ----------------------------------------------
+      locale: const Locale('es', 'ES'), 
 
+      // Control del tema global basado en el controlador estático
+      themeMode: ConfigController.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+      
       theme: ThemeData(
         useMaterial3: true,
         colorSchemeSeed: Colors.indigo,
+        brightness: Brightness.light,
+        fontFamily: 'Georgia',
         visualDensity: VisualDensity.adaptivePlatformDensity,
-        pageTransitionsTheme: const PageTransitionsTheme(
-          builders: {
-            TargetPlatform.android: ZoomPageTransitionsBuilder(),
-            TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          },
-        ),
+      ),
+
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: Colors.indigo,
+        brightness: Brightness.dark,
       ),
 
       home: const HomeScreen(),
@@ -81,7 +100,6 @@ class MiDiarioApp extends StatelessWidget {
   }
 }
 
-/// Ayuda a mejorar el rendimiento visual en listas largas quitando el efecto de brillo
 class _NoGlowScrollBehavior extends ScrollBehavior {
   @override
   Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
