@@ -27,7 +27,7 @@ class ScrapbookWrapper extends StatelessWidget {
         
         // 2. Textura de papel con filtro de color dinámico
         Image.asset(
-          'assets/images/kraft_paper_background.jpg',
+          'assets/background/kraft_paper_background.jpg',
           fit: BoxFit.cover,
           width: double.infinity,
           height: double.infinity,

@@ -300,7 +300,7 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     image: DecorationImage(
-                      image: AssetImage('assets/images/$_fondoSeleccionado.jpg'),
+                      image: AssetImage('assets/background/$_fondoSeleccionado.jpg'),
                       fit: BoxFit.cover,
                     ),
                     borderRadius: const BorderRadius.horizontal(right: Radius.circular(8)),
@@ -736,9 +736,10 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             const SizedBox(height: 10),
-            _opcionFondoLista('Papel Clásico', 'default', 'assets/images/default.jpg'),
-            _opcionFondoLista('Aventura Travel', 'travel', 'assets/images/travel.jpg'),
-            _opcionFondoLista('Especial Love', 'love', 'assets/images/love.jpg'),
+            _opcionFondoLista('Papel clásico', 'default', 'assets/background/default.jpg'),
+             _opcionFondoLista('Papel oscuro', 'dark', 'assets/background/defaultDarkSheet.jpg'),
+            _opcionFondoLista('Viaje único', 'travel', 'assets/background/travel.jpg'),
+            _opcionFondoLista('Especial Love', 'love', 'assets/background/love.jpg'),
             const SizedBox(height: 20),
           ],
         ),

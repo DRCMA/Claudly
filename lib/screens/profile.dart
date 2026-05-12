@@ -1,4 +1,8 @@
+import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -24,6 +28,22 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
   DateTime _fechaNacimiento = DateTime(2000, 1, 1);
   String _fechaUnion = ""; 
   final List<String> _generos = ["Hombre", "Mujer", "No binario", "Otro"];
+  String _paisSeleccionado = "España";
+  String _photoUrlLocal = "";
+  bool _subiendoImagen = false;
+
+  final List<Map<String, String>> _avataresPredeterminados = [
+    {"nombre": "Tomatito", "url": "assets/profilePicture/toumáquet.png", "tipo": "asset"},
+  ];
+
+  final List<String> _paises = [
+  "Afganistán", "Albania", "Alemania", "Andorra", "Angola", "Argentina", "Australia", 
+  "Austria", "Bélgica", "Bolivia", "Brasil", "Canadá", "Chile", "China", "Colombia", 
+  "Costa Rica", "Cuba", "Dinamarca", "Ecuador", "Egipto", "El Salvador", "España", 
+  "Estados Unidos", "Francia", "Guatemala", "Honduras", "Italia", "México", "Nicaragua", 
+  "Panamá", "Paraguay", "Perú", "Portugal", "Reino Unido", "República Dominicana", 
+  "Uruguay", "Venezuela"
+]..sort();
 
   @override
   bool get wantKeepAlive => true;
@@ -31,6 +51,7 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
   @override
   void initState() {
     super.initState();
+    _photoUrlLocal = user?.photoURL ?? "";
     _formatearFechaUnion();
     _inicializarPerfil();
     // Listener manual: fuerza setState aunque la tab esté en keepAlive
@@ -102,6 +123,8 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
           _bioController.text = data['bio'] ?? "";
           String generoDb = data['genero'] ?? "Hombre";
           _generoSeleccionado = _generos.contains(generoDb) ? generoDb : "Hombre";
+          _paisSeleccionado = data['pais'] ?? "España";
+          _photoUrlLocal = data['photoURL'] ?? user?.photoURL ?? "";
           if (data['fechaNac'] != null) {
             _fechaNacimiento = (data['fechaNac'] as Timestamp).toDate();
           }
@@ -111,15 +134,159 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
       debugPrint("Error cargando perfil: $e");
     }
   }
+  
+Future<void> _cambiarFotoGaleria() async {
+  final picker = ImagePicker();
+  
+  // 1. Seleccionamos la imagen original de la galería directamente
+  final XFile? pickedFile = await picker.pickImage(
+    source: ImageSource.gallery, 
+    imageQuality: 70, // Bajamos un poco la calidad para que la subida sea más rápida
+  );
+  
+  if (pickedFile == null || user == null) return;
+
+  // 2. Procedemos a subir la imagen seleccionada directamente
+  setState(() => _subiendoImagen = true);
+  
+  try {
+    final File file = File(pickedFile.path); 
+    final String ext = pickedFile.path.split('.').last;
+    final String fileName = "avatar_${user!.uid}_${DateTime.now().millisecondsSinceEpoch}.$ext";
+    
+    final ref = FirebaseStorage.instance.ref().child('avatars').child(fileName);
+    
+    // Subida a Firebase Storage
+    await ref.putFile(file);
+    final String downloadUrl = await ref.getDownloadURL();
+
+    // Sincronizamos con FirebaseAuth, Firestore y la UI
+    await _actualizarFotoUrl(downloadUrl);
+    
+  } catch (e) {
+    debugPrint("Error subiendo imagen: $e");
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Error al subir la imagen")),
+      );
+    }
+  } finally {
+    if (mounted) setState(() => _subiendoImagen = false);
+  }
+}
+
+  // 2. Actualiza la URL en FirebaseAuth, Firestore y la UI local
+Future<void> _actualizarFotoUrl(String nuevaUrl) async {
+  if (user == null) return;
+  try {
+    // 1. Lo actualizamos en el perfil interno de Firebase Auth
+    await user!.updatePhotoURL(nuevaUrl);
+    
+    // 2. LO MÁS IMPORTANTE: Lo subimos a la base de datos para que otros lo vean
+    await FirebaseFirestore.instance.collection('users').doc(user!.uid).update({
+      'photoURL': nuevaUrl,
+    });
+
+    setState(() {
+      _photoUrlLocal = nuevaUrl;
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("¡Foto actualizada para todos!")),
+      );
+    }
+  } catch (e) {
+    debugPrint("Error sincronizando foto: $e");
+  }
+}
+
+void _mostrarOpcionesCambiarFoto() {
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: ConfigController.getBrownDark(),
+      title: const Text("Cambiar foto de perfil", 
+          style: TextStyle(color: Colors.white, fontFamily: 'Georgia')),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.photo_library, color: Colors.white70),
+            title: const Text("Subir desde Galería", style: TextStyle(color: Colors.white)),
+            onTap: () {
+              Navigator.pop(ctx);
+              _cambiarFotoGaleria();
+            },
+          ),
+          const Divider(color: Colors.white10),
+          const Align(
+            alignment: Alignment.centerLeft,
+          ),
+          const SizedBox(height: 15),
+          
+          // --- CUADRÍCULA DE 4 COLUMNAS ---
+          SizedBox(
+            width: double.maxFinite, 
+            height: 200, // Ajusta la altura según necesites
+            child: GridView.builder(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4, // 4 imágenes por fila
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+              ),
+              itemCount: _avataresPredeterminados.length,
+              itemBuilder: (context, index) {
+                final item = _avataresPredeterminados[index];
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _actualizarFotoUrl(item["url"]!);
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.white24),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(7),
+                      child: Image.asset(item["url"]!, fit: BoxFit.cover),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text("CANCELAR", style: TextStyle(color: Colors.white54)),
+        )
+      ],
+    ),
+  );
+}
 
   Future<void> _guardarPerfil() async {
+    String nuevoMote = _moteController.text.trim();
+
+    if (nuevoMote.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("El mote no puede estar vacío"))
+    );
+    return;
+  }
+
     if (user == null) return;
     try {
       await FirebaseFirestore.instance.collection('users').doc(user!.uid).update({
-        'mote': _moteController.text.trim(),
+        'mote': nuevoMote,
         'bio': _bioController.text.trim(),
         'genero': _generoSeleccionado,
         'fechaNac': Timestamp.fromDate(_fechaNacimiento),
+        'pais': _paisSeleccionado,
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -217,12 +384,42 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
                   _buildBrownCard(
                     child: Row(
                       children: [
-                        CircleAvatar(
-                          radius: 35,
-                          backgroundColor: Colors.white10,
-                          backgroundImage: (user!.photoURL != null) ? NetworkImage(user!.photoURL!) : null,
-                          child: (user!.photoURL == null) ? const Icon(Icons.person, size: 35, color: Colors.white54) : null,
-                        ),
+                        GestureDetector(
+  onTap: _subiendoImagen ? null : _mostrarOpcionesCambiarFoto,
+  child: Stack(
+    alignment: Alignment.center,
+    children: [
+      // Avatar con imagen cacheada
+      CircleAvatar(
+  radius: 35,
+  backgroundColor: Colors.white10,
+  backgroundImage: _photoUrlLocal.isEmpty 
+      ? null 
+      : (_photoUrlLocal.startsWith('http') 
+          // Si es de internet, usamos CACHÉ
+          ? CachedNetworkImageProvider(_photoUrlLocal) as ImageProvider
+          // Si es local (assets), usamos AssetImage
+          : AssetImage(_photoUrlLocal)),
+  child: _photoUrlLocal.isEmpty 
+      ? const Icon(Icons.person, size: 35, color: Colors.white54) 
+      : null,
+),
+      // Rueda de carga al subir desde la galería
+      if (_subiendoImagen)
+        const CircularProgressIndicator(color: Colors.amber),
+      // Icono pequeño de cámara para indicar que es editable
+      Positioned(
+        bottom: 0,
+        right: 0,
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: const BoxDecoration(color: Colors.indigo, shape: BoxShape.circle),
+          child: const Icon(Icons.camera_alt, size: 12, color: Colors.white),
+        ),
+      ),
+    ],
+  ),
+),
                         const SizedBox(width: 15),
                         Expanded(
                           child: Column(
@@ -231,6 +428,7 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
                               _buildEtiqueta("mote:"),
                               TextField(
                                 controller: _moteController,
+                                maxLength: 20,
                                 style: mainTextStyle.copyWith(fontWeight: FontWeight.bold),
                                 decoration: const InputDecoration(
                                   isDense: true, 
@@ -281,6 +479,8 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
                           onTap: _seleccionarFecha
                         ),
                         const Divider(color: Colors.white10, height: 20),
+                        _buildDropdownPais(),
+                        const Divider(color: Colors.white10, height: 20),
                         _buildDropdownGenero(),
                         const Divider(color: Colors.white10, height: 20),
                         _buildDataRow(
@@ -299,7 +499,7 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.power_settings_new, color: Colors.redAccent, size: 20),
+                        Icon(Icons.logout, color: Colors.redAccent, size: 20),
                         SizedBox(width: 10),
                         Text("CERRAR SESIÓN", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
                       ],
@@ -367,7 +567,31 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
       ),
     );
   }
-
+Widget _buildDropdownPais() {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _buildEtiqueta("PAÍS:"),
+      DropdownButton<String>(
+        value: _paisSeleccionado,
+        isExpanded: true,
+        menuMaxHeight: 300,
+        dropdownColor: ConfigController.getBrownDark(),
+        style: const TextStyle(color: Colors.white, fontFamily: 'Georgia'),
+        underline: Container(),
+        items: _paises.map((String pais) {
+          return DropdownMenuItem<String>(
+            value: pais,
+            child: Text(pais),
+          );
+        }).toList(),
+        onChanged: (String? nuevo) {
+          if (nuevo != null) setState(() => _paisSeleccionado = nuevo);
+        },
+      ),
+    ],
+  );
+}
   Widget _buildDropdownGenero() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

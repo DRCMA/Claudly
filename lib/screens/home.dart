@@ -336,12 +336,36 @@ class _HomeScreenState extends State<HomeScreen> {
                   automaticallyImplyLeading: false,
                   title: const Text("Claud", style: TextStyle(color: Colors.white, fontFamily: 'Georgia')),
                   actions: [
-                    if (user.photoURL != null)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 15),
-                        child: CircleAvatar(radius: 16, backgroundImage: NetworkImage(user.photoURL!)),
-                      ),
-                  ],
+  StreamBuilder<DocumentSnapshot>(
+    // Escuchamos los cambios en el documento del usuario en tiempo real
+    stream: FirebaseFirestore.instance
+        .collection('users')
+        .doc(FirebaseAuth.instance.currentUser?.uid)
+        .snapshots(),
+    builder: (context, snapshot) {
+      String? photoUrl;
+      if (snapshot.hasData && snapshot.data!.exists) {
+        photoUrl = snapshot.data!['photoURL'];
+      }
+
+      return Padding(
+        padding: const EdgeInsets.only(right: 15),
+        child: CircleAvatar(
+          radius: 18,
+          backgroundColor: Colors.white10,
+          backgroundImage: (photoUrl == null || photoUrl.isEmpty)
+              ? null
+              : (photoUrl.startsWith('http')
+                  ? NetworkImage(photoUrl) as ImageProvider
+                  : AssetImage(photoUrl)),
+          child: (photoUrl == null || photoUrl.isEmpty)
+              ? const Icon(Icons.person, size: 18, color: Colors.white)
+              : null,
+        ),
+      );
+    },
+  ),
+],
                 ),
                 floatingActionButton: _selectedIndex == 0 
                   ? GestureDetector(

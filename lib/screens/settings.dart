@@ -69,11 +69,6 @@ class _SettingsPageState extends State<SettingsPage> {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-        'notifAmistad': _notifAmistad,
-        'notifDiario': _notifDiario,
-        'notifMuro': _notifMuro,
-        'notifRecordatorios': _notifRecordatorios,
-        'darkMode': _isDarkMode,
         'estadoUsuario': _estadoUsuario,
       }).catchError((e) => debugPrint("Firestore error: $e"));
     }
