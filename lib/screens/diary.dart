@@ -296,7 +296,8 @@ class _DiaryPageState extends State<DiaryPage> {
                                   style: TextStyle(
                                       fontFamily: 'Georgia',
                                       fontStyle: FontStyle.italic,
-                                      fontSize: 16)),
+                                      fontSize: 16,
+                                      color: Colors.brown)),
                             ],
                           ),
                         ),
@@ -321,7 +322,7 @@ class _DiaryPageState extends State<DiaryPage> {
       child: Container(
         decoration: BoxDecoration(
           image: DecorationImage(
-              image: AssetImage('assets/images/$fondo.jpg'), fit: BoxFit.cover),
+              image: AssetImage('assets/background/$fondo.jpg'), fit: BoxFit.cover),
         ),
         child: Stack(
           children: [
@@ -352,7 +353,7 @@ class _DiaryPageState extends State<DiaryPage> {
                       style: TextStyle(
                         fontFamily: 'Georgia',
                         fontWeight: FontWeight.bold,
-                        color: Colors.black54,
+                        color: Colors.blueGrey[700],
                         fontSize: ConfigController.getAdaptedSize(13),
                       ),
                     ),
@@ -384,7 +385,7 @@ class _DiaryPageState extends State<DiaryPage> {
           child: Text(
             marcador['texto']?.toString().toUpperCase() ?? '',
             style: const TextStyle(
-                fontFamily: 'Courier', fontSize: 12, fontWeight: FontWeight.bold),
+                fontFamily: 'Courier', fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black),
           ),
         ),
       ),
@@ -496,7 +497,7 @@ class _DiaryPageState extends State<DiaryPage> {
     );
   }
 
-  void _confirmarBorrado(String docId, List elementos) {
+void _confirmarBorrado(String docId, List elementos) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -508,24 +509,41 @@ class _DiaryPageState extends State<DiaryPage> {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              setState(() => _saltandoAlFinal = true);
-              for (var item in elementos) {
-                if ((item['tipo'] == 'foto' || item['tipo'] == 'imagen') &&
-                    item['url'] != null) {
-                  await _storageService.borrarArchivo(item['url']);
+              
+              // 1. PREPARAMOS EL ESTADO ANTES DE CUALQUIER AWAIT
+              // Así, cuando el StreamBuilder se dispare, ya sabrá qué estamos esperando.
+              setState(() {
+                _saltandoAlFinal = true;
+                _paginaAlVolver = 0; // Volvemos a la portada tras borrar
+                _hashEsperado = 'borrado';
+              });
+
+              try {
+                // 2. Borramos de Storage primero
+                for (var item in elementos) {
+                  if ((item['tipo'] == 'foto' || item['tipo'] == 'imagen') &&
+                      item['url'] != null) {
+                    await _storageService.borrarArchivo(item['url']);
+                  }
+                }
+                
+                // 3. Borramos de Firestore
+                await FirebaseFirestore.instance
+                    .collection('diarios')
+                    .doc(widget.diarioId)
+                    .collection('recuerdos')
+                    .doc(docId)
+                    .delete();
+                    
+              } catch (e) {
+                // Si algo falla catastróficamente, quitamos la pantalla de carga
+                debugPrint("Error al eliminar: $e");
+                if (mounted) {
+                  setState(() => _saltandoAlFinal = false);
                 }
               }
-              await FirebaseFirestore.instance
-                  .collection('diarios')
-                  .doc(widget.diarioId)
-                  .collection('recuerdos')
-                  .doc(docId)
-                  .delete();
-              _paginaAlVolver = 0;
-              _hashEsperado = 'borrado';
             },
-            child:
-                const Text("Eliminar", style: TextStyle(color: Colors.red)),
+            child: const Text("Eliminar", style: TextStyle(color: Colors.red)),
           ),
         ],
       ),

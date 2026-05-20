@@ -7,6 +7,7 @@ import 'screens/home.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
+import 'services/local_alarm_service.dart';
 
 void main() async {
   // Solo llamamos al método sin asignar la variable si no la vamos a usar.
@@ -20,7 +21,7 @@ void main() async {
   
   // 1. Inicialización de Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
+  await LocalAlarmService.init();
   // 2. Configuración de persistencia de Firestore
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,

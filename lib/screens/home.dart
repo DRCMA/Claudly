@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:claud/services/notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,6 +10,8 @@ import 'diary.dart';
 import 'wall.dart';
 import 'package:flutter/services.dart'; 
 import 'scrapbook_wrapper.dart';
+import '../services/local_alarm_service.dart';
+
 import 'profile.dart'; 
 import 'social.dart';
 
@@ -68,12 +71,13 @@ class _HomeScreenState extends State<HomeScreen> {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text("Nuevo Diario", style: TextStyle(fontFamily: 'Georgia')),
+        backgroundColor: ConfigController.getDiaryColor(),
+        title: Text("Nuevo Diario", style: TextStyle(fontFamily: 'Georgia', color: ConfigController.getTextColor())),
         content: TextField(
           controller: _nombreDiarioController,
           maxLength: 20,
           inputFormatters: [LengthLimitingTextInputFormatter(20)],
-          style: TextStyle(fontSize: ConfigController.getAdaptedSize(16)),
+          style: TextStyle(fontSize: ConfigController.getAdaptedSize(16),color: Colors.black),
           decoration: InputDecoration(
             hintText: "Nombre del diario...",
             filled: true,
@@ -133,6 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   'colaboradores': [FirebaseAuth.instance.currentUser!.uid],
                   'fechaCreacion': FieldValue.serverTimestamp(),
                   'ultimaActividad': FieldValue.serverTimestamp(),
+                  'favorito': false,
                 });
 
                 if (dialogContext.mounted) {
@@ -158,8 +163,10 @@ class _HomeScreenState extends State<HomeScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Renombrar Diario"),
-        content: TextField(controller: _nombreDiarioController, autofocus: true),
+        backgroundColor: ConfigController.getDiaryColor(),
+        title: Text("Renombrar Diario", style: TextStyle(fontFamily: 'Georgia', color: ConfigController.getTextColor())),
+        content: TextField(controller: _nombreDiarioController, autofocus: true, maxLength: 20, inputFormatters: [LengthLimitingTextInputFormatter(20)],
+        style: TextStyle(fontSize: ConfigController.getAdaptedSize(16), color: ConfigController.getTextColor())),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancelar")),
           TextButton(
@@ -329,6 +336,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: ScrapbookWrapper(
               isDarkMode: darkModeActivo,
               child: Scaffold(
+                resizeToAvoidBottomInset: false,
                 backgroundColor: ConfigController.getPageBgColor(),
                 appBar: AppBar(
                   backgroundColor: ConfigController.getHeaderColor(),
@@ -337,7 +345,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: const Text("Claud", style: TextStyle(color: Colors.white, fontFamily: 'Georgia')),
                   actions: [
   StreamBuilder<DocumentSnapshot>(
-    // Escuchamos los cambios en el documento del usuario en tiempo real
     stream: FirebaseFirestore.instance
         .collection('users')
         .doc(FirebaseAuth.instance.currentUser?.uid)
@@ -353,14 +360,26 @@ class _HomeScreenState extends State<HomeScreen> {
         child: CircleAvatar(
           radius: 18,
           backgroundColor: Colors.white10,
-          backgroundImage: (photoUrl == null || photoUrl.isEmpty)
-              ? null
-              : (photoUrl.startsWith('http')
-                  ? NetworkImage(photoUrl) as ImageProvider
-                  : AssetImage(photoUrl)),
-          child: (photoUrl == null || photoUrl.isEmpty)
-              ? const Icon(Icons.person, size: 18, color: Colors.white)
-              : null,
+          // Eliminamos el backgroundImage directo y usamos ClipOval con CachedNetworkImage
+          child: ClipOval(
+            child: (photoUrl == null || photoUrl.isEmpty)
+                ? const Icon(Icons.person, size: 18, color: Colors.white)
+                : (photoUrl.startsWith('http')
+                    ? CachedNetworkImage(
+                        imageUrl: photoUrl,
+                        placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
+                        errorWidget: (context, url, error) => const Icon(Icons.error, size: 18),
+                        fit: BoxFit.cover,
+                        width: 36, // El doble del radio del avatar
+                        height: 36,
+                      )
+                    : Image.asset(
+                        photoUrl,
+                        fit: BoxFit.cover,
+                        width: 36,
+                        height: 36,
+                      )),
+          ),
         ),
       );
     },
@@ -505,6 +524,7 @@ class _DiariosTabPersistenteState extends State<DiariosTabPersistente> with Auto
             Filter('colaboradores', arrayContains: FirebaseAuth.instance.currentUser!.uid),
             Filter('invitados', arrayContains: FirebaseAuth.instance.currentUser!.uid),
           ))
+          .orderBy('favorito', descending: true)
           .orderBy('ultimaActividad', descending: true)
           .snapshots();
     }
@@ -522,7 +542,15 @@ class _DiariosTabPersistenteState extends State<DiariosTabPersistente> with Auto
 
   @override
   bool get wantKeepAlive => true; 
-
+Future<void> _toggleFavorito(String id, bool estadoActual) async {
+    try {
+      await FirebaseFirestore.instance.collection('diarios').doc(id).update({
+        'favorito': !estadoActual,
+      });
+    } catch (e) {
+      debugPrint("Error al cambiar estado de favorito: $e");
+    }
+  }
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -561,10 +589,19 @@ class _DiariosTabPersistenteState extends State<DiariosTabPersistente> with Auto
     );
   }
 
+Color _colorCard(Map<String, dynamic> data){
+  if(data['favorito'] == true) {
+    return const Color.fromARGB(255, 213, 178, 61) ;
+  } else {
+    return ConfigController.getDiaryColor();
+  }
+}
+
   Widget _cardDiario(String nombre, String id, Map<String, dynamic> data) {
     final String miId = FirebaseAuth.instance.currentUser!.uid;
     final List colaboradores = data['colaboradores'] ?? [];
     final List invitados = data['invitados'] ?? [];
+    final bool esFavorito = data['favorito'] ?? false;
     
     bool esInvitacion = invitados.contains(miId);
     bool esCompartido = colaboradores.length > 1;
@@ -576,7 +613,7 @@ class _DiariosTabPersistenteState extends State<DiariosTabPersistente> with Auto
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
       decoration: BoxDecoration(
-        color: ConfigController.getDiaryColor(),
+        color: _colorCard(data),
         borderRadius: BorderRadius.circular(15),
         boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(2, 4))]
       ),
@@ -616,10 +653,24 @@ class _DiariosTabPersistenteState extends State<DiariosTabPersistente> with Auto
                 if (value == 'edit') widget.onRenombrar(id, nombre);
                 if (value == 'delete') widget.onEliminar(id);
                 if (value == 'add_friend') widget.onAddAmigo(id);
+                if (value == 'favourite') _toggleFavorito(id, esFavorito);
+                if (value == 'reminder') _mostrarDialogoRecordatorio(id, nombre, data);
               },
               itemBuilder: (context) => [
-                const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 20), SizedBox(width: 8), Text("Cambiar nombre")])),
-                const PopupMenuItem(value: 'add_friend', child: Row(children: [Icon(Icons.person_add, size: 20), SizedBox(width: 8), Text("Añadir amigo")])),
+                const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 20, color: Colors.brown), SizedBox(width: 8), Text("Cambiar nombre")])),
+                const PopupMenuItem(value: 'add_friend', child: Row(children: [Icon(Icons.person_add, size: 20, color: Colors.indigo), SizedBox(width: 8), Text("Añadir amigo")])),
+                PopupMenuItem(
+    value: 'favourite', 
+    child: Row(
+      children: [
+        Icon(esFavorito ? Icons.star_border : Icons.star, size: 20, color: Color(0xFFFFD54F) ), 
+        const SizedBox(width: 8), 
+        Text(esFavorito ? "Quitar de favoritos" : "Marcar como favorito")
+      ]
+    )
+  ),
+  // ◄ AÑADE ESTA NUEVA OPCIÓN:
+  const PopupMenuItem(value: 'reminder', child: Row(children: [Icon(Icons.alarm, size: 20, color: Colors.orange), SizedBox(width: 8), Text("Recordatorio")])),
                 const PopupMenuDivider(),
                 const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red, size: 20), SizedBox(width: 8), Text("Eliminar", style: TextStyle(color: Colors.red))])),
               ],
@@ -627,7 +678,148 @@ class _DiariosTabPersistenteState extends State<DiariosTabPersistente> with Auto
       ),
     );
   }
+void _mostrarDialogoRecordatorio(String diarioId, String nombreDiario, Map<String, dynamic> data) {
+    final String miId = FirebaseAuth.instance.currentUser!.uid;
+    // Extraemos la configuración individual de este usuario para este diario
+    final Map<String, dynamic> recordatoriosGlobales = data['recordatorios'] ?? {};
+    final Map<String, dynamic> miConfig = recordatoriosGlobales[miId] ?? {'tipo': 'desactivada'};
 
+    String tipo = miConfig['tipo'] ?? 'desactivada';
+    List<int> diasSemana = List<int>.from(miConfig['dias'] ?? []);
+    int intervalo = miConfig['intervalo'] ?? 1;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Text("Recordatorio: $nombreDiario", style: const TextStyle(fontFamily: 'Georgia')),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("Frecuencia de aviso:", style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  DropdownButton<String>(
+                    value: tipo,
+                    isExpanded: true,
+                    items: const [
+                      DropdownMenuItem(value: 'desactivada', child: Text("Desactivada")),
+                      DropdownMenuItem(value: 'diaria', child: Text("Diaria")),
+                      DropdownMenuItem(value: 'semanal', child: Text("Semanal")),
+                      DropdownMenuItem(value: 'personalizada', child: Text("Personalizada")),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) setDialogState(() => tipo = val);
+                    },
+                  ),
+                  if (tipo == 'semanal') ...[
+                    const SizedBox(height: 15),
+                    const Text("¿Qué días?:", style: TextStyle(fontWeight: FontWeight.bold)),
+                    Wrap(
+                      spacing: 5,
+                      children: ['L', 'M', 'X', 'J', 'V', 'S', 'D'].asMap().entries.map((e) {
+                        int index = e.key + 1; // 1 = Lunes, 7 = Domingo
+                        bool isSelected = diasSemana.contains(index);
+                        return FilterChip(
+                          label: Text(e.value),
+                          selected: isSelected,
+                          selectedColor: Colors.orange[200],
+                          onSelected: (selected) {
+                            setDialogState(() {
+                              if (selected) {
+                                diasSemana.add(index);
+                              } else {
+                                diasSemana.remove(index);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                  if (tipo == 'personalizada') ...[
+                    const SizedBox(height: 15),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text("Avisar cada:", style: TextStyle(fontWeight: FontWeight.bold)),
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.remove_circle_outline, color: Colors.brown),
+                              onPressed: () => setDialogState(() { if(intervalo > 1) intervalo--; }),
+                            ),
+                            Text("$intervalo días", style: const TextStyle(fontSize: 16)),
+                            IconButton(
+                              icon: const Icon(Icons.add_circle_outline, color: Colors.brown),
+                              onPressed: () => setDialogState(() => intervalo++),
+                            ),
+                          ],
+                        )
+                      ],
+                    )
+                  ],
+                  const SizedBox(height: 15),
+                  const Text(
+                    "* El aviso sonará a la misma hora en la que estás guardando este ajuste.", 
+                    style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey)
+                  )
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx), 
+                child: const Text("Cancelar", style: TextStyle(color: Colors.grey))
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                onPressed: () async {
+                  // 1. Capturamos el messenger ANTES de la operación asíncrona
+                  final messenger = ScaffoldMessenger.of(context);
+                  
+                  final DateTime ahora = DateTime.now();
+                  recordatoriosGlobales[miId] = {
+                    'tipo': tipo,
+                    'dias': tipo == 'semanal' ? diasSemana : [],
+                    'intervalo': tipo == 'personalizada' ? intervalo : 1,
+                    'hora': ahora.hour,
+                    'minuto': ahora.minute,
+                  };
+
+                  // 2. Operación asíncrona
+                  await FirebaseFirestore.instance.collection('diarios').doc(diarioId).update({
+                    'recordatorios': recordatoriosGlobales
+                  });
+
+                  // 3. Programamos la alarma local (lo implementamos en el paso 2)
+                  await LocalAlarmService.programarAlarma(
+                    diarioId: diarioId,
+                    nombreDiario: nombreDiario,
+                    config: recordatoriosGlobales[miId],
+                  );
+
+                  // 4. Cerramos el diálogo (verificando que siga existiendo)
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  
+                  // 5. Usamos la variable capturada para la SnackBar (¡adiós error!)
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(tipo == 'desactivada' ? "Alarma desactivada" : "Recordatorio a las ${ahora.hour}:${ahora.minute.toString().padLeft(2, '0')}"),
+                      backgroundColor: Colors.green
+                    )
+                  );
+                },
+                child: const Text("Guardar", style: TextStyle(color: Colors.white)),
+              )
+            ],
+          );
+        }
+      )
+    );
+  }
   void _mostrarDialogoInvitacion(String diarioId, String nombre, Map<String, dynamic> data) {
     final List colaboradoresIds = data['colaboradores'] ?? [];
     final String remitente = data['invitadoPorNombre'] ?? "Alguien";

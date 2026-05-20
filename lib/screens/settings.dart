@@ -22,6 +22,8 @@ class _SettingsPageState extends State<SettingsPage> {
   int _fontSizeIndex = 0;
   int _idiomaIndex = 0;
 
+  bool _cargando = true;
+
   bool get _allOff => !_notifAmistad && !_notifDiario && !_notifMuro && !_notifRecordatorios;
   final List<String> _fontSizes = ["Normal", "Grande"];
   final List<String> _idiomas = ["Español", "Catalá", "English"];
@@ -51,6 +53,8 @@ class _SettingsPageState extends State<SettingsPage> {
       ConfigController.fontSize = _fontSizeIndex == 1 ? 26.0 : 20.0;
       ConfigController.isDarkMode = _isDarkMode;
       ConfigController.darkModeListenable.value = _isDarkMode;
+
+      _cargando = false;
     });
   }
 
@@ -140,6 +144,15 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+
+    if (_cargando) {
+      return Container(
+        color: ConfigController.getBrownDark(),
+        child: const Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        ),
+      );
+    }
     // Todos los colores se derivan de _isDarkMode (variable local de estado),
     // NO de ConfigController, para garantizar que el rebuild es completo e instantáneo.
     final bool d = _isDarkMode;
@@ -287,11 +300,15 @@ class _SettingsPageState extends State<SettingsPage> {
             icon: const Icon(Icons.arrow_left, color: Colors.indigo), onPressed: onLeft),
         SizedBox(
           width: 70,
-          child: Text(value,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+          child: Text(
+            value,
               textAlign: TextAlign.center,
               style: TextStyle(
                   color: textColor, fontSize: fontSize,
                   fontWeight: FontWeight.bold, fontFamily: 'Georgia')),
+        ),
         ),
         IconButton(
             icon: const Icon(Icons.arrow_right, color: Colors.indigo), onPressed: onRight),

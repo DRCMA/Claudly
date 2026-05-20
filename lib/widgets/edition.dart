@@ -737,7 +737,7 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
             ),
             const SizedBox(height: 10),
             _opcionFondoLista('Papel clásico', 'default', 'assets/background/default.jpg'),
-             _opcionFondoLista('Papel oscuro', 'dark', 'assets/background/defaultDarkSheet.jpg'),
+             _opcionFondoLista('Papel oscuro', 'defaultDarkSheet', 'assets/background/defaultDarkSheet.jpg'),
             _opcionFondoLista('Viaje único', 'travel', 'assets/background/travel.jpg'),
             _opcionFondoLista('Especial Love', 'love', 'assets/background/love.jpg'),
             const SizedBox(height: 20),

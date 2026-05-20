@@ -193,7 +193,7 @@ Future<void> _actualizarFotoUrl(String nuevaUrl) async {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("¡Foto actualizada para todos!")),
+        const SnackBar(content: Text("Foto actualizada")),
       );
     }
   } catch (e) {
