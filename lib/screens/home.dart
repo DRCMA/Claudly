@@ -8,6 +8,7 @@ import '../services/config_controller.dart';
 import 'settings.dart'; 
 import 'diary.dart';
 import 'wall.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/services.dart'; 
 import 'scrapbook_wrapper.dart';
 import '../services/local_alarm_service.dart';
@@ -17,7 +18,6 @@ import 'social.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
-
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -32,10 +32,9 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: _selectedIndex);
-
+    _guardarTokenDeNotificaciones();
     // ── Listener para actualizar AppBar y BottomBar al instante ──────────────
     ConfigController.darkModeListenable.addListener(_onDarkModeChanged);
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (FirebaseAuth.instance.currentUser == null) {
         _buildLoginScreen();
@@ -53,6 +52,32 @@ class _HomeScreenState extends State<HomeScreen> {
     _pageController.dispose();
     _nombreDiarioController.dispose();
     super.dispose();
+  }
+Future<void> _guardarTokenDeNotificaciones() async {
+    String? miId = FirebaseAuth.instance.currentUser?.uid;
+    if (miId == null) return;
+
+    // Pedimos permiso (importante para iOS y Android 13+)
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission();
+
+    // Obtenemos el DNI único de este móvil
+    String? token = await messaging.getToken();
+
+    if (token != null) {
+      // Lo guardamos en el documento del usuario en Firestore
+      await FirebaseFirestore.instance.collection('users').doc(miId).update({
+        'fcmToken': token,
+      });
+      debugPrint("Token FCM Guardado: $token");
+    }
+
+    // Si el token cambia por algún motivo, lo actualizamos automáticamente
+    FirebaseMessaging.instance.onTokenRefresh.listen((nuevoToken) {
+      FirebaseFirestore.instance.collection('users').doc(miId).update({
+        'fcmToken': nuevoToken,
+      });
+    });
   }
 
   void _onItemTapped(int index) {
@@ -77,7 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
           controller: _nombreDiarioController,
           maxLength: 20,
           inputFormatters: [LengthLimitingTextInputFormatter(20)],
-          style: TextStyle(fontSize: ConfigController.getAdaptedSize(16),color: Colors.black),
+          style: TextStyle(fontSize: ConfigController.getAdaptedSize(16), color: Colors.black), // Texto en negro añadido
           decoration: InputDecoration(
             hintText: "Nombre del diario...",
             filled: true,
@@ -115,7 +140,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     .collection('diarios')
                     .where('userId', isEqualTo: user.uid)
                     .get();
-
                 if (!dialogContext.mounted) return;
 
                 if (snapshot.docs.length >= 10) {
@@ -139,7 +163,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   'ultimaActividad': FieldValue.serverTimestamp(),
                   'favorito': false,
                 });
-
                 if (dialogContext.mounted) {
                   Navigator.pop(dialogContext);
                 }
@@ -165,8 +188,13 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: ConfigController.getDiaryColor(),
         title: Text("Renombrar Diario", style: TextStyle(fontFamily: 'Georgia', color: ConfigController.getTextColor())),
-        content: TextField(controller: _nombreDiarioController, autofocus: true, maxLength: 20, inputFormatters: [LengthLimitingTextInputFormatter(20)],
-        style: TextStyle(fontSize: ConfigController.getAdaptedSize(16), color: ConfigController.getTextColor())),
+        content: TextField(
+          controller: _nombreDiarioController, 
+          autofocus: true, 
+          maxLength: 20, 
+          inputFormatters: [LengthLimitingTextInputFormatter(20)],
+          style: TextStyle(fontSize: ConfigController.getAdaptedSize(16), color: Colors.black) // Texto en negro añadido
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancelar")),
           TextButton(
@@ -234,9 +262,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         String mote = (doc.data() as Map)['mote']?.toString().toLowerCase() ?? "";
                         return mote.contains(filtro);
                       }).toList();
-
                       if (amigos.isEmpty) return const Padding(padding: EdgeInsets.all(8.0), child: Text("No se encontraron amigos"));
-
                       return ListView.builder(
                         shrinkWrap: true,
                         itemCount: amigos.length,
@@ -314,12 +340,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Leemos el modo en cada build — el listener garantiza que build se llame
-    // cada vez que cambia, incluso desde otra tab (Settings)
     final bool darkModeActivo = ConfigController.isDarkMode;
     final Color textColor = ConfigController.getTextColor();
     final Color brownBlackColor = ConfigController.getBrownDark();
-
+    
     return StreamBuilder<User?>(
       stream: _authService.authStateChanges,
       builder: (context, snapshot) {
@@ -344,47 +368,46 @@ class _HomeScreenState extends State<HomeScreen> {
                   automaticallyImplyLeading: false,
                   title: const Text("Claud", style: TextStyle(color: Colors.white, fontFamily: 'Georgia')),
                   actions: [
-  StreamBuilder<DocumentSnapshot>(
-    stream: FirebaseFirestore.instance
-        .collection('users')
-        .doc(FirebaseAuth.instance.currentUser?.uid)
-        .snapshots(),
-    builder: (context, snapshot) {
-      String? photoUrl;
-      if (snapshot.hasData && snapshot.data!.exists) {
-        photoUrl = snapshot.data!['photoURL'];
-      }
+                    StreamBuilder<DocumentSnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(FirebaseAuth.instance.currentUser?.uid)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        String? photoUrl;
+                        if (snapshot.hasData && snapshot.data!.exists) {
+                          photoUrl = snapshot.data!['photoURL'];
+                        }
 
-      return Padding(
-        padding: const EdgeInsets.only(right: 15),
-        child: CircleAvatar(
-          radius: 18,
-          backgroundColor: Colors.white10,
-          // Eliminamos el backgroundImage directo y usamos ClipOval con CachedNetworkImage
-          child: ClipOval(
-            child: (photoUrl == null || photoUrl.isEmpty)
-                ? const Icon(Icons.person, size: 18, color: Colors.white)
-                : (photoUrl.startsWith('http')
-                    ? CachedNetworkImage(
-                        imageUrl: photoUrl,
-                        placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
-                        errorWidget: (context, url, error) => const Icon(Icons.error, size: 18),
-                        fit: BoxFit.cover,
-                        width: 36, // El doble del radio del avatar
-                        height: 36,
-                      )
-                    : Image.asset(
-                        photoUrl,
-                        fit: BoxFit.cover,
-                        width: 36,
-                        height: 36,
-                      )),
-          ),
-        ),
-      );
-    },
-  ),
-],
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 15),
+                          child: CircleAvatar(
+                            radius: 18,
+                            backgroundColor: Colors.white10,
+                            child: ClipOval(
+                              child: (photoUrl == null || photoUrl.isEmpty)
+                                  ? const Icon(Icons.person, size: 18, color: Colors.white)
+                                  : (photoUrl.startsWith('http')
+                                      ? CachedNetworkImage(
+                                          imageUrl: photoUrl,
+                                          placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
+                                          errorWidget: (context, url, error) => const Icon(Icons.error, size: 18),
+                                          fit: BoxFit.cover,
+                                          width: 36,
+                                          height: 36,
+                                        )
+                                      : Image.asset(
+                                          photoUrl,
+                                          fit: BoxFit.cover,
+                                          width: 36,
+                                          height: 36,
+                                        )),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
                 floatingActionButton: _selectedIndex == 0 
                   ? GestureDetector(
@@ -495,7 +518,7 @@ class DiariosTabPersistente extends StatefulWidget {
   final Function(String) onEliminar;
   final Function(String) onAddAmigo;
   final VoidCallback onCrearFlow;
-
+  
   const DiariosTabPersistente({
     super.key, 
     required this.user, 
@@ -504,7 +527,7 @@ class DiariosTabPersistente extends StatefulWidget {
     required this.onAddAmigo, 
     required this.onCrearFlow
   });
-
+  
   @override
   State<DiariosTabPersistente> createState() => _DiariosTabPersistenteState();
 }
@@ -512,7 +535,7 @@ class DiariosTabPersistente extends StatefulWidget {
 class _DiariosTabPersistenteState extends State<DiariosTabPersistente> with AutomaticKeepAliveClientMixin {
   
   Stream<QuerySnapshot>? _diariosStream;
-
+  
   @override
   void initState() {
     super.initState();
@@ -542,7 +565,8 @@ class _DiariosTabPersistenteState extends State<DiariosTabPersistente> with Auto
 
   @override
   bool get wantKeepAlive => true; 
-Future<void> _toggleFavorito(String id, bool estadoActual) async {
+
+  Future<void> _toggleFavorito(String id, bool estadoActual) async {
     try {
       await FirebaseFirestore.instance.collection('diarios').doc(id).update({
         'favorito': !estadoActual,
@@ -551,12 +575,12 @@ Future<void> _toggleFavorito(String id, bool estadoActual) async {
       debugPrint("Error al cambiar estado de favorito: $e");
     }
   }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    
     if (widget.user == null) return const Center(child: Text("Inicia sesión para ver tus diarios", style: TextStyle(color: Colors.white70)));
-
+    
     return StreamBuilder<QuerySnapshot>(
       stream: _diariosStream,
       builder: (context, snapshot) {
@@ -589,13 +613,13 @@ Future<void> _toggleFavorito(String id, bool estadoActual) async {
     );
   }
 
-Color _colorCard(Map<String, dynamic> data){
-  if(data['favorito'] == true) {
-    return const Color.fromARGB(255, 213, 178, 61) ;
-  } else {
-    return ConfigController.getDiaryColor();
+  Color _colorCard(Map<String, dynamic> data){
+    if(data['favorito'] == true) {
+      return const Color.fromARGB(255, 213, 178, 61);
+    } else {
+      return ConfigController.getDiaryColor();
+    }
   }
-}
 
   Widget _cardDiario(String nombre, String id, Map<String, dynamic> data) {
     final String miId = FirebaseAuth.instance.currentUser!.uid;
@@ -605,11 +629,10 @@ Color _colorCard(Map<String, dynamic> data){
     
     bool esInvitacion = invitados.contains(miId);
     bool esCompartido = colaboradores.length > 1;
-
     Color iconoColor = esInvitacion 
         ? Colors.green 
         : (esCompartido ? Colors.blue[800]! : Colors.brown[700]!);
-
+        
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
       decoration: BoxDecoration(
@@ -660,17 +683,16 @@ Color _colorCard(Map<String, dynamic> data){
                 const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 20, color: Colors.brown), SizedBox(width: 8), Text("Cambiar nombre")])),
                 const PopupMenuItem(value: 'add_friend', child: Row(children: [Icon(Icons.person_add, size: 20, color: Colors.indigo), SizedBox(width: 8), Text("Añadir amigo")])),
                 PopupMenuItem(
-    value: 'favourite', 
-    child: Row(
-      children: [
-        Icon(esFavorito ? Icons.star_border : Icons.star, size: 20, color: Color(0xFFFFD54F) ), 
-        const SizedBox(width: 8), 
-        Text(esFavorito ? "Quitar de favoritos" : "Marcar como favorito")
-      ]
-    )
-  ),
-  // ◄ AÑADE ESTA NUEVA OPCIÓN:
-  const PopupMenuItem(value: 'reminder', child: Row(children: [Icon(Icons.alarm, size: 20, color: Colors.orange), SizedBox(width: 8), Text("Recordatorio")])),
+                  value: 'favourite', 
+                  child: Row(
+                    children: [
+                      Icon(esFavorito ? Icons.star_border : Icons.star, size: 20, color: Color(0xFFFFD54F) ), 
+                      const SizedBox(width: 8), 
+                      Text(esFavorito ? "Quitar de favoritos" : "Marcar como favorito")
+                    ]
+                  )
+                ),
+                const PopupMenuItem(value: 'reminder', child: Row(children: [Icon(Icons.alarm, size: 20, color: Colors.orange), SizedBox(width: 8), Text("Recordatorio")])),
                 const PopupMenuDivider(),
                 const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red, size: 20), SizedBox(width: 8), Text("Eliminar", style: TextStyle(color: Colors.red))])),
               ],
@@ -678,15 +700,21 @@ Color _colorCard(Map<String, dynamic> data){
       ),
     );
   }
-void _mostrarDialogoRecordatorio(String diarioId, String nombreDiario, Map<String, dynamic> data) {
+
+  void _mostrarDialogoRecordatorio(String diarioId, String nombreDiario, Map<String, dynamic> data) {
     final String miId = FirebaseAuth.instance.currentUser!.uid;
-    // Extraemos la configuración individual de este usuario para este diario
     final Map<String, dynamic> recordatoriosGlobales = data['recordatorios'] ?? {};
     final Map<String, dynamic> miConfig = recordatoriosGlobales[miId] ?? {'tipo': 'desactivada'};
 
     String tipo = miConfig['tipo'] ?? 'desactivada';
     List<int> diasSemana = List<int>.from(miConfig['dias'] ?? []);
     int intervalo = miConfig['intervalo'] ?? 1;
+
+    // --- NUEVO: Variables para controlar el reloj ---
+    // Si ya tenía una hora guardada, la cargamos. Si no, ponemos la hora actual por defecto.
+    int horaGuardada = miConfig['hora'] ?? DateTime.now().hour;
+    int minutoGuardado = miConfig['minuto'] ?? DateTime.now().minute;
+    TimeOfDay tiempoElegido = TimeOfDay(hour: horaGuardada, minute: minutoGuardado);
 
     showDialog(
       context: context,
@@ -761,11 +789,57 @@ void _mostrarDialogoRecordatorio(String diarioId, String nombreDiario, Map<Strin
                       ],
                     )
                   ],
-                  const SizedBox(height: 15),
-                  const Text(
-                    "* El aviso sonará a la misma hora en la que estás guardando este ajuste.", 
-                    style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey)
-                  )
+                  
+                  // --- NUEVO: BOTÓN DEL RELOJ ---
+                  // Solo se muestra si la alarma NO está desactivada
+                  if (tipo != 'desactivada') ...[
+                    const SizedBox(height: 20),
+                    const Divider(),
+                    const SizedBox(height: 10),
+                    const Text("¿A qué hora?:", style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () async {
+                        // Abre el reloj nativo del sistema
+                        TimeOfDay? seleccionado = await showTimePicker(
+                          context: context,
+                          initialTime: tiempoElegido,
+                          builder: (BuildContext context, Widget? child) {
+                            return MediaQuery(
+                              data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                              child: child!,
+                            );
+                          },
+                        );
+                        // Si el usuario eligió una hora y le dio a Aceptar, actualizamos el estado
+                        if (seleccionado != null) {
+                          setDialogState(() {
+                            tiempoElegido = seleccionado;
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange[50],
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.orange[300]!, width: 1.5),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              // Formatea la hora elegida (ej. 14:30)
+                              "${tiempoElegido.hour.toString().padLeft(2, '0')}:${tiempoElegido.minute.toString().padLeft(2, '0')}",
+                              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.brown),
+                            ),
+                            const Icon(Icons.access_time_filled, color: Colors.orange, size: 28),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ]
                 ],
               ),
             ),
@@ -777,37 +851,34 @@ void _mostrarDialogoRecordatorio(String diarioId, String nombreDiario, Map<Strin
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
                 onPressed: () async {
-                  // 1. Capturamos el messenger ANTES de la operación asíncrona
                   final messenger = ScaffoldMessenger.of(context);
                   
-                  final DateTime ahora = DateTime.now();
+                  // Guardamos la hora EXACTA que ha elegido en el reloj
                   recordatoriosGlobales[miId] = {
                     'tipo': tipo,
                     'dias': tipo == 'semanal' ? diasSemana : [],
                     'intervalo': tipo == 'personalizada' ? intervalo : 1,
-                    'hora': ahora.hour,
-                    'minuto': ahora.minute,
+                    'hora': tiempoElegido.hour,
+                    'minuto': tiempoElegido.minute,
                   };
-
-                  // 2. Operación asíncrona
+                  
                   await FirebaseFirestore.instance.collection('diarios').doc(diarioId).update({
                     'recordatorios': recordatoriosGlobales
                   });
-
-                  // 3. Programamos la alarma local (lo implementamos en el paso 2)
+                  
                   await LocalAlarmService.programarAlarma(
                     diarioId: diarioId,
                     nombreDiario: nombreDiario,
                     config: recordatoriosGlobales[miId],
                   );
-
-                  // 4. Cerramos el diálogo (verificando que siga existiendo)
+                  
                   if (ctx.mounted) Navigator.pop(ctx);
                   
-                  // 5. Usamos la variable capturada para la SnackBar (¡adiós error!)
                   messenger.showSnackBar(
                     SnackBar(
-                      content: Text(tipo == 'desactivada' ? "Alarma desactivada" : "Recordatorio a las ${ahora.hour}:${ahora.minute.toString().padLeft(2, '0')}"),
+                      content: Text(tipo == 'desactivada' 
+                          ? "Alarma desactivada" 
+                          : "Recordatorio guardado a las ${tiempoElegido.hour.toString().padLeft(2, '0')}:${tiempoElegido.minute.toString().padLeft(2, '0')}"),
                       backgroundColor: Colors.green
                     )
                   );
@@ -820,6 +891,7 @@ void _mostrarDialogoRecordatorio(String diarioId, String nombreDiario, Map<Strin
       )
     );
   }
+
   void _mostrarDialogoInvitacion(String diarioId, String nombre, Map<String, dynamic> data) {
     final List colaboradoresIds = data['colaboradores'] ?? [];
     final String remitente = data['invitadoPorNombre'] ?? "Alguien";

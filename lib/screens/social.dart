@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 import '../services/config_controller.dart';
 import '../services/notification_service.dart';
+import '../services/local_alarm_service.dart';
 
 class SocialPage extends StatefulWidget {
   const SocialPage({super.key});
@@ -23,7 +24,6 @@ class _SocialPageState extends State<SocialPage> with SingleTickerProviderStateM
   List<DocumentSnapshot> _solicitudesLocal = [];
   bool _cargandoAmigos = true;
   bool _cargandoSolicitudes = true;
-  
   StreamSubscription? _amigosSub;
   StreamSubscription? _solicitudesSub;
 
@@ -40,17 +40,47 @@ class _SocialPageState extends State<SocialPage> with SingleTickerProviderStateM
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _escucharDatosRealTime();
-    // Listener manual: fuerza setState aunque la tab esté en keepAlive
+    
+    // Listeners para actualizar estados globales y limpiar búsquedas
     ConfigController.darkModeListenable.addListener(_onDarkModeChanged);
+    _tabController.addListener(_onTabChanged);
+    _searchController.addListener(_onSearchTextChanged);
   }
 
   void _onDarkModeChanged() {
     if (mounted) setState(() {});
   }
 
+  // Se activa al cambiar de pestaña en el menú social
+  void _onTabChanged() {
+    if (_tabController.indexIsChanging) {
+      _limpiarEstadoBusqueda(borrarTexto: true);
+    }
+  }
+
+  // Se activa cada vez que el usuario escribe o borra una letra
+  void _onSearchTextChanged() {
+    if (_usuarioEncontrado != null || _mensajeBusqueda != null) {
+      _limpiarEstadoBusqueda(borrarTexto: false);
+    }
+  }
+
+  void _limpiarEstadoBusqueda({required bool borrarTexto}) {
+    if (mounted) {
+      setState(() {
+        if (borrarTexto) _searchController.clear();
+        _usuarioEncontrado = null;
+        _mensajeBusqueda = null;
+        _solicitudEnviada = false;
+      });
+    }
+  }
+
   @override
   void dispose() {
     ConfigController.darkModeListenable.removeListener(_onDarkModeChanged);
+    _tabController.removeListener(_onTabChanged);
+    _searchController.removeListener(_onSearchTextChanged);
     _amigosSub?.cancel();
     _solicitudesSub?.cancel();
     _tabController.dispose();
@@ -60,7 +90,6 @@ class _SocialPageState extends State<SocialPage> with SingleTickerProviderStateM
 
   void _escucharDatosRealTime() {
     if (miId == null) return;
-
     _amigosSub = FirebaseFirestore.instance
         .collection('users')
         .doc(miId)
@@ -81,6 +110,21 @@ class _SocialPageState extends State<SocialPage> with SingleTickerProviderStateM
         .where('estado', isEqualTo: 'pendiente')
         .snapshots()
         .listen((snapshot) {
+
+    if (!_cargandoSolicitudes) {
+        for (var change in snapshot.docChanges) {
+          if (change.type == DocumentChangeType.added) {
+            final data = change.doc.data();
+            final nombrePeticion = data?['nombre'] ?? 'Alguien';
+            
+            LocalAlarmService.mostrarNotificacionInstantanea(
+              id: change.doc.id.hashCode.abs() % 2147483647,
+              titulo: '¡Nueva solicitud de amistad!',
+              cuerpo: '$nombrePeticion quiere ser tu amigo!!',
+            );
+          }
+        }
+      }
       if (mounted) {
         setState(() {
           _solicitudesLocal = snapshot.docs;
@@ -93,11 +137,9 @@ class _SocialPageState extends State<SocialPage> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     super.build(context);
-
     final bool isDark = ConfigController.isDarkMode;
     final Color cardColor = ConfigController.getBrownDark();
     final Color iconColor = ConfigController.getIconColor();
-
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Column(
@@ -118,52 +160,48 @@ class _SocialPageState extends State<SocialPage> with SingleTickerProviderStateM
               labelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
               tabs: [
                 const Tab(text: "AMIGOS", icon: Icon(Icons.people, size: 18)),
-Tab(
-  child: Column(
-    mainAxisAlignment: MainAxisAlignment.center,
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      // Stack para poner el puntito rojo sobre el icono
-      Stack(
-        clipBehavior: Clip.none,
-        children: [
-          const Icon(Icons.notifications, size: 18),
-          if (_solicitudesLocal.isNotEmpty)
-            Positioned(
-              right: -8,
-              top: -2,
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: const BoxDecoration(
-                  color: Colors.red,
-                  shape: BoxShape.circle,
-                ),
-                constraints: const BoxConstraints(
-                  minWidth: 14,
-                  minHeight: 14,
-                ),
-                child: Text(
-                  "${_solicitudesLocal.length}",
-                  style: const TextStyle(
-                    fontSize: 8,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+                Tab(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          const Icon(Icons.notifications, size: 18),
+                          if (_solicitudesLocal.isNotEmpty)
+                            Positioned(
+                              right: -8,
+                              top: -2,
+                              child: Container(
+                                padding: const EdgeInsets.all(2),
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 14,
+                                  minHeight: 14,
+                                ),
+                                child: Text(
+                                  "${_solicitudesLocal.length}",
+                                  style: const TextStyle(
+                                    fontSize: 8,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      const Text("SOLICITUDES", style: TextStyle(fontSize: 10)),
+                    ],
                   ),
-                  textAlign: TextAlign.center,
                 ),
-              ),
-            ),
-        ],
-      ),
-      const SizedBox(height: 2), // Espacio pequeño entre icono y texto
-      const Text(
-        "SOLICITUDES",
-        style: TextStyle(fontSize: 10), // Ajusta según tu diseño
-      ),
-    ],
-  ),
-),
-const Tab(text: "BUSCAR", icon: Icon(Icons.person_search, size: 18)),
+                const Tab(text: "BUSCAR", icon: Icon(Icons.person_search, size: 18)),
               ],
             ),
           ),
@@ -198,7 +236,6 @@ const Tab(text: "BUSCAR", icon: Icon(Icons.person_search, size: 18)),
       return const Center(child: CircularProgressIndicator(color: Colors.white70));
     }
     if (_amigosLocal.isEmpty) return _textPlaceholder("Aún no tienes amigos añadidos");
-
     return ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: _amigosLocal.length,
@@ -233,7 +270,6 @@ const Tab(text: "BUSCAR", icon: Icon(Icons.person_search, size: 18)),
       return const Center(child: CircularProgressIndicator(color: Colors.white70));
     }
     if (_solicitudesLocal.isEmpty) return _textPlaceholder("No tienes solicitudes pendientes");
-
     return ListView.builder(
       padding: const EdgeInsets.all(12),
       itemCount: _solicitudesLocal.length,
@@ -274,10 +310,46 @@ const Tab(text: "BUSCAR", icon: Icon(Icons.person_search, size: 18)),
   }
 
   Widget _buildTabBuscar(Color cardColor, bool isDark) {
+    // Calculamos de forma segura tu propio código ID Social de 6 caracteres
+    final String miSocialId = (miId != null && miId!.length >= 6) 
+        ? miId!.substring(0, 6).toUpperCase() 
+        : (miId ?? "");
+
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
+          // --- APARTADO NUEVO: TU PROPIO SOCIAL ID (CON COPIADO AL PORTAPAPELES) ---
+          GestureDetector(
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: miSocialId));
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("¡ID Copiado al portapapeles! 📋"))
+              );
+            },
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 15),
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.copy, size: 14, color: Color(0xFFFFD54F)),
+                  const SizedBox(width: 8),
+                  Text(
+                    miSocialId,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
           TextField(
             controller: _searchController,
             onSubmitted: (_) => _buscarUsuario(),
@@ -343,7 +415,6 @@ const Tab(text: "BUSCAR", icon: Icon(Icons.person_search, size: 18)),
       _usuarioEncontrado = null;
       _solicitudEnviada = false;
     });
-
     try {
       final snapshot = await FirebaseFirestore.instance.collection('users').get();
       DocumentSnapshot? userDoc;
@@ -358,9 +429,31 @@ const Tab(text: "BUSCAR", icon: Icon(Icons.person_search, size: 18)),
         if (userDoc.id == miId) {
           setState(() => _mensajeBusqueda = "No puedes buscarte a ti mismo");
         } else {
+          // 1. Validamos primero si ya es tu amigo actualmente
+          final amigoDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(miId)
+              .collection('amigos')
+              .doc(userDoc.id)
+              .get();
+
+          if (amigoDoc.exists) {
+            setState(() => _mensajeBusqueda = "Este usuario ya es tu amigo");
+            return;
+          }
+
+          // 2. Validamos si hay una petición activa pendiente de resolver
+          final reqCheck = await FirebaseFirestore.instance
+              .collection('solicitudes')
+              .where('emisorId', isEqualTo: miId)
+              .where('receptorId', isEqualTo: userDoc.id)
+              .where('estado', isEqualTo: 'pendiente')
+              .get();
+
           setState(() {
             _usuarioEncontrado = userDoc!.data() as Map<String, dynamic>?;
             _usuarioEncontrado!['uid'] = userDoc.id;
+            _solicitudEnviada = reqCheck.docs.isNotEmpty; // Si existe, bloquea el botón en true
           });
         }
       } else {
@@ -378,7 +471,6 @@ const Tab(text: "BUSCAR", icon: Icon(Icons.person_search, size: 18)),
     try {
       final miDoc = await FirebaseFirestore.instance.collection('users').doc(miId).get();
       final miData = miDoc.data();
-
       await FirebaseFirestore.instance.collection('solicitudes').add({
         'emisorId': miId,
         'emisorMote': miData?['mote'] ?? "Usuario",
@@ -387,13 +479,11 @@ const Tab(text: "BUSCAR", icon: Icon(Icons.person_search, size: 18)),
         'estado': 'pendiente',
         'fecha': FieldValue.serverTimestamp(),
       });
-
       await NotificationService.enviarNotificacionPush(
         receptorUid: receptorId,
         titulo: "Nueva solicitud",
         cuerpo: "${miData?['mote'] ?? 'Alguien'} quiere ser tu amigo.",
       );
-
       if (!mounted) return;
       setState(() => _solicitudEnviada = true);
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -412,7 +502,6 @@ const Tab(text: "BUSCAR", icon: Icon(Icons.person_search, size: 18)),
     if (miId == null) return;
     final data = docSolicitud.data() as Map<String, dynamic>;
     final emisorId = data['emisorId'];
-
     try {
       final miDoc = await FirebaseFirestore.instance.collection('users').doc(miId).get();
       final miData = miDoc.data();

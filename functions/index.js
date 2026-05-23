@@ -1,4 +1,5 @@
-const { auth } = require("firebase-functions/v1");
+const functions = require("firebase-functions/v1"); // 1. Importamos TODO de la v1
+const { auth } = functions; // 2. Extraemos auth para que tu código antiguo de limpieza siga funcionando
 const admin = require("firebase-admin");
 
 if (!admin.apps.length) {
@@ -64,3 +65,45 @@ exports.limpiezaDatosUsuario = auth.user().onDelete(async (user) => {
         return null;
     }
 });
+
+exports.notificarNuevaSolicitud = functions.firestore
+  .document("solicitudes/{solicitudId}") // <--- Aquí es donde vigila la colección global
+  .onCreate(async (snap, context) => {
+    
+    const datosSolicitud = snap.data();
+    const userId = datosSolicitud.receptorId; // El ID del que recibe la petición
+    const nombrePeticion = datosSolicitud.emisorMote || "Alguien"; // El mote del que la envía
+
+    if (!userId) {
+        console.log("No se encontró receptorId en el documento de la solicitud.");
+        return null;
+    }
+
+    // 1. Buscamos el token del usuario que recibe la notificación
+    const userDoc = await admin.firestore().collection("users").doc(userId).get();
+    const fcmToken = userDoc.data()?.fcmToken;
+
+    if (!fcmToken) {
+        console.log("No se encontró token FCM para el usuario receptor:", userId);
+        return null;
+    }
+
+    // 2. Preparamos el mensaje push universal
+    const payload = {
+      notification: {
+        title: "¡Nueva solicitud de amistad!",
+        body: `${nombrePeticion} quiere ser tu amigo en Claud.`
+      },
+      token: fcmToken
+    };
+
+    // 3. Enviamos la notificación al dispositivo de forma nativa
+    try {
+        await admin.messaging().send(payload);
+        console.log("Notificación push enviada con éxito al usuario:", userId);
+        return null;
+    } catch (error) {
+        console.error("Error al enviar la notificación push:", error);
+        return null;
+    }
+  });

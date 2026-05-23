@@ -32,6 +32,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        javaCompileOptions.annotationProcessorOptions.arguments.put("room.schemaLocation", "$projectDir/schemas")
     }
 
     buildTypes {

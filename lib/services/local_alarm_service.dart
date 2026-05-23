@@ -1,16 +1,23 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:flutter_timezone/flutter_timezone.dart'; // <--- LIBRERÍA NUEVA
 
 class LocalAlarmService {
   static final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
 
   static Future<void> init() async {
-    // Inicializa la base de datos de zonas horarias (imprescindible para alarmas)
+    // 1. Inicializa la base de datos de horas
     tz.initializeTimeZones();
 
-    const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    // Para iOS (Darwin)
+    // 2. Lee la zona horaria real de tu móvil (Ej: "Europe/Madrid") y la sincroniza
+    final TimezoneInfo tzInfo = await FlutterTimezone.getLocalTimezone();
+    final String timeZoneName = tzInfo.identifier;
+    tz.setLocalLocation(tz.getLocation(timeZoneName));
+
+    // 3. Configuración visual
+    const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('icono_notif');
+    
     const DarwinInitializationSettings iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -23,6 +30,14 @@ class LocalAlarmService {
     );
 
     await _plugin.initialize(initSettings);
+
+    final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
+        _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+
+    if (androidImplementation != null) {
+      await androidImplementation.requestNotificationsPermission();
+      await androidImplementation.requestExactAlarmsPermission();
+    }
   }
 
   static Future<void> programarAlarma({
@@ -30,30 +45,27 @@ class LocalAlarmService {
     required String nombreDiario,
     required Map<String, dynamic> config,
   }) async {
-    // Usamos el hashCode del string del diarioId para tener un ID numérico único por diario
-    final int notifId = diarioId.hashCode;
-
-    // Primero cancelamos cualquier alarma previa de este diario
+    // Transformamos el ID en un número positivo seguro para el límite de 32 bits de Android
+    final int notifId = diarioId.hashCode.abs() % 2147483647;
+    
+    // Primero cancelamos cualquier alarma anterior para no duplicar
     await _plugin.cancel(notifId);
 
     final String tipo = config['tipo'] ?? 'desactivada';
-    if (tipo == 'desactivada') return; // Si es desactivada, ya hemos cancelado arriba.
-
     final int hora = config['hora'] ?? 10;
     final int minuto = config['minuto'] ?? 0;
 
-    // Detalles visuales de la notificación
     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
       'canal_recordatorios', 
       'Recordatorios de Diarios',
       channelDescription: 'Avisos para escribir en tus diarios',
       importance: Importance.max,
       priority: Priority.high,
-      icon: '@mipmap/ic_launcher',
+      icon: 'icono_notif',
     );
     const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
 
-    // Calculamos la próxima hora a la que debe pitar
+    // Calculamos la fecha en la zona horaria CORRECTA del móvil
     tz.TZDateTime fechaProgramada = _proximaHora(hora, minuto);
 
     if (tipo == 'diaria') {
@@ -65,33 +77,31 @@ class LocalAlarmService {
         platformDetails,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-        matchDateTimeComponents: DateTimeComponents.time, // Repetir cada día a esta hora
+        matchDateTimeComponents: DateTimeComponents.time, // Se repetirá todos los días
       );
     } 
     else if (tipo == 'semanal') {
       List<int> dias = List<int>.from(config['dias'] ?? []);
-      // flutter_local_notifications maneja los días del 1(Lunes) al 7(Domingo)
       for (int dia in dias) {
-        // Se programa una alarma semanal independiente para cada día seleccionado
-        // Sumamos el día al notifId para no sobrescribirlas entre sí
+        // Un ID diferente por cada día para que no se sobreescriban
+        int subId = (notifId + dia).abs() % 2147483647;
+        tz.TZDateTime diaProg = _proximoDiaDeLaSemana(hora, minuto, dia);
+        
         await _plugin.zonedSchedule(
-          notifId + dia, 
+          subId, 
           '¡Hora de escribir!',
-          'Toca actualizar tu diario "$nombreDiario".',
-          _proximoDiaDeLaSemana(hora, minuto, dia),
+          'Toca actualizar tu diario semanal "$nombreDiario".',
+          diaProg,
           platformDetails,
           androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
           uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-          matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime, // Repetir cada semana ese día
+          matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
         );
       }
     } 
     else if (tipo == 'personalizada') {
       int intervalo = config['intervalo'] ?? 1;
-      // Para intervalos personalizados (ej. cada 3 días), se programa una única alarma futura.
-      // Cuando el usuario entra a la app, tendrías que re-programarla para +3 días después.
       tz.TZDateTime fechaIntervalo = fechaProgramada.add(Duration(days: intervalo));
-      
       await _plugin.zonedSchedule(
         notifId,
         'Recordatorio pendiente',
@@ -106,8 +116,11 @@ class LocalAlarmService {
 
   // --- Helpers de Tiempo ---
   static tz.TZDateTime _proximaHora(int hora, int minuto) {
+    // Ahora "tz.local" sí sabe la hora de tu país
     final tz.TZDateTime ahora = tz.TZDateTime.now(tz.local);
     tz.TZDateTime programada = tz.TZDateTime(tz.local, ahora.year, ahora.month, ahora.day, hora, minuto);
+    
+    // Si la hora ya ha pasado hoy, la pasa al día siguiente
     if (programada.isBefore(ahora)) {
       programada = programada.add(const Duration(days: 1));
     }
@@ -120,5 +133,32 @@ class LocalAlarmService {
       programada = programada.add(const Duration(days: 1));
     }
     return programada;
+  }
+
+  // --- NUEVO: Método para notificaciones instantáneas (Social) ---
+  static Future<void> mostrarNotificacionInstantanea({
+    required int id,
+    required String titulo,
+    required String cuerpo,
+  }) async {
+    // Creamos un canal diferente en Android para cosas sociales
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'canal_social', 
+      'Social y Amigos',
+      channelDescription: 'Avisos de nuevas solicitudes y mensajes',
+      importance: Importance.max,
+      priority: Priority.high,
+      icon: 'icono_notif', // Usamos tu silueta blanca para que no salga el cuadrado negro
+    );
+    
+    const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
+
+    // .show() lanza la notificación en el acto
+    await _plugin.show(
+      id,
+      titulo,
+      cuerpo,
+      platformDetails,
+    );
   }
 }
