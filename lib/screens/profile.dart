@@ -101,7 +101,7 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
           'photoURL': currentUser.photoURL ?? "",
           'idPublico': idPub,
           'bio': '',
-          'genero': 'Hombre',
+          'genero': 'Otro',
           'fechaNac': Timestamp.fromDate(_fechaNacimiento),
           'fechaCreacion': FieldValue.serverTimestamp(),
         });

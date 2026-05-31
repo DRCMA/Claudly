@@ -161,4 +161,8 @@ class LocalAlarmService {
       platformDetails,
     );
   }
+
+  static Future<void> cancelarTodas() async {
+    await _plugin.cancelAll();
+  }
 }

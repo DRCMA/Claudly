@@ -1,4 +1,4 @@
-package com.example.claud
+package com.example.claudly
 
 import io.flutter.embedding.android.FlutterActivity
 

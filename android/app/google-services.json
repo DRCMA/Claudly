@@ -48,6 +48,42 @@
           ]
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:557429013068:android:bf39869c636f85b72792e9",
+        "android_client_info": {
+          "package_name": "com.tuempresa.claudly"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "557429013068-qfaj0eavicklithapd3224u3gu2kq6s3.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyARKkhnxxc_o0Too6WKtlnG6L2wKrBrGWM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "557429013068-qfaj0eavicklithapd3224u3gu2kq6s3.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "557429013068-qrkcjddmk7ks34khc9bgbf3lpbig52tu.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.appDlau"
+              }
+            }
+          ]
+        }
+      }
     }
   ],
   "configuration_version": "1"

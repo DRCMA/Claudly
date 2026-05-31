@@ -173,9 +173,7 @@ class _DiaryPageState extends State<DiaryPage> {
                 : Text(
                     widget.nombreDiario,
                     style: const TextStyle(
-                      fontFamily: 
-
- 'Georgia',
+                      fontFamily: 'Georgia',
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
@@ -398,9 +396,7 @@ class _DiaryPageState extends State<DiaryPage> {
                               SizedBox(height: 20),
                                Text("Abriendo diario...",
                                   style: TextStyle(
-                                      fontFamily: 
-
- 'Georgia',
+                                      fontFamily: 'Georgia',
                                       fontStyle: FontStyle.italic,
                                       fontSize: 16,
                                        color: Colors.brown)),
@@ -533,6 +529,18 @@ class _DiaryPageState extends State<DiaryPage> {
       );
 
 }
+
+else if (item['tipo'] == 'sticker') {
+      return Transform.rotate(
+        angle: angulo,
+        child: Image.asset(
+          item['rutaAsset'] ?? 'assets/stickers/Fiso.png', // Carga el asset local directamente
+          width: (item['ancho'] ?? 100).toDouble(),
+          fit: BoxFit.contain,
+        ),
+      );
+    }
+    
     double anchoTexto = (item['ancho'] ?? 200.0).toDouble();
 
     return Transform.rotate(

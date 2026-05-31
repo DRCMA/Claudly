@@ -1,5 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:claud/services/notification_service.dart';
+import 'package:claudly/services/notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; 
@@ -27,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late PageController _pageController;
   final AuthService _authService = AuthService();
   final TextEditingController _nombreDiarioController = TextEditingController();
+  
 
   @override
   void initState() {
@@ -53,6 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _nombreDiarioController.dispose();
     super.dispose();
   }
+
 Future<void> _guardarTokenDeNotificaciones() async {
     String? miId = FirebaseAuth.instance.currentUser?.uid;
     if (miId == null) return;
@@ -315,7 +317,7 @@ Future<void> _guardarTokenDeNotificaciones() async {
           children: [
             const Icon(Icons.auto_stories, size: 100, color: Colors.white),
             const SizedBox(height: 20),
-            const Text("CLAUD", style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold, fontFamily: 'Georgia')),
+            const Text("CLAUDLY", style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold, fontFamily: 'Georgia')),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 40, vertical: 20),
               child: Text("Tu diario privado y compartido. Inicia sesión para continuar.", 
@@ -366,7 +368,7 @@ Future<void> _guardarTokenDeNotificaciones() async {
                   backgroundColor: ConfigController.getHeaderColor(),
                   elevation: 0,
                   automaticallyImplyLeading: false,
-                  title: const Text("Claud", style: TextStyle(color: Colors.white, fontFamily: 'Georgia')),
+                  title: const Text("Claudly", style: TextStyle(color: Colors.white, fontFamily: 'Georgia')),
                   actions: [
                     StreamBuilder<DocumentSnapshot>(
                       stream: FirebaseFirestore.instance
@@ -626,6 +628,7 @@ class _DiariosTabPersistenteState extends State<DiariosTabPersistente> with Auto
     final List colaboradores = data['colaboradores'] ?? [];
     final List invitados = data['invitados'] ?? [];
     final bool esFavorito = data['favorito'] ?? false;
+    bool esCreador = data['userId'] == miId;
     
     bool esInvitacion = invitados.contains(miId);
     bool esCompartido = colaboradores.length > 1;
@@ -678,6 +681,7 @@ class _DiariosTabPersistenteState extends State<DiariosTabPersistente> with Auto
                 if (value == 'add_friend') widget.onAddAmigo(id);
                 if (value == 'favourite') _toggleFavorito(id, esFavorito);
                 if (value == 'reminder') _mostrarDialogoRecordatorio(id, nombre, data);
+                if (value == 'leave') _confirmarSalirDiario(id);
               },
               itemBuilder: (context) => [
                 const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 20, color: Colors.brown), SizedBox(width: 8), Text("Cambiar nombre")])),
@@ -694,7 +698,12 @@ class _DiariosTabPersistenteState extends State<DiariosTabPersistente> with Auto
                 ),
                 const PopupMenuItem(value: 'reminder', child: Row(children: [Icon(Icons.alarm, size: 20, color: Colors.orange), SizedBox(width: 8), Text("Recordatorio")])),
                 const PopupMenuDivider(),
-                const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red, size: 20), SizedBox(width: 8), Text("Eliminar", style: TextStyle(color: Colors.red))])),
+                
+                // --- NUEVA LÓGICA: Mostrar Eliminar o Salir según quién seas ---
+                if (esCreador)
+                  const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red, size: 20), SizedBox(width: 8), Text("Eliminar", style: TextStyle(color: Colors.red))]))
+                else
+                  const PopupMenuItem(value: 'leave', child: Row(children: [Icon(Icons.exit_to_app, color: Colors.red, size: 20), SizedBox(width: 8), Text("Salir del diario", style: TextStyle(color: Colors.red))])),
               ],
             ),
       ),
@@ -947,6 +956,42 @@ class _DiariosTabPersistenteState extends State<DiariosTabPersistente> with Auto
               messenger.showSnackBar(const SnackBar(content: Text("¡Ahora eres colaborador!")));
             },
             child: const Text("ACEPTAR", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+  void _confirmarSalirDiario(String diarioId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("¿Salir del diario?"),
+        content: const Text(
+          "Dejarás de tener acceso a este diario y ya no te aparecerá. El creador y los demás colaboradores seguirán conservándolo. ¿Estás seguro?"
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("CANCELAR"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              String miId = FirebaseAuth.instance.currentUser!.uid;
+              
+              // Nos eliminamos de la lista de colaboradores
+              await FirebaseFirestore.instance.collection('diarios').doc(diarioId).update({
+                'colaboradores': FieldValue.arrayRemove([miId])
+              });
+              
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Has salido del diario"), backgroundColor: Colors.orange)
+                );
+              }
+            },
+            child: const Text("SALIR", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

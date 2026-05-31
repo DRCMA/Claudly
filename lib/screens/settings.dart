@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import "../services/config_controller.dart";
 import 'package:shared_preferences/shared_preferences.dart';
 import 'scrapbook_wrapper.dart';
+import '../services/local_alarm_service.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -70,11 +71,20 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setInt('idioma', _idiomaIndex);
     await prefs.setString('estadoUsuario', _estadoUsuario);
 
-    final user = FirebaseAuth.instance.currentUser;
+    if (!_notifRecordatorios) {
+      await LocalAlarmService.cancelarTodas();
+    }
+
+   final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-        'estadoUsuario': _estadoUsuario,
-      }).catchError((e) => debugPrint("Firestore error: $e"));
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'preferenciasNotificaciones': {
+          'amistad': _notifAmistad,
+          'diario': _notifDiario,
+          'muro': _notifMuro,
+          'recordatorios': _notifRecordatorios,
+        }
+      }, SetOptions(merge: true)); // ¡Importante el merge para no borrar otros datos!
     }
   }
 

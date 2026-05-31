@@ -1,44 +1,39 @@
-const functions = require("firebase-functions/v1"); // 1. Importamos TODO de la v1
-const { auth } = functions; // 2. Extraemos auth para que tu código antiguo de limpieza siga funcionando
+const functions = require("firebase-functions/v1"); 
+const { auth } = functions;
 const admin = require("firebase-admin");
 
 if (!admin.apps.length) {
     admin.initializeApp();
 }
 
+// =========================================================================
+// 1. Limpieza de cuenta al borrar usuario
+// =========================================================================
 exports.limpiezaDatosUsuario = auth.user().onDelete(async (user) => {
     const db = admin.firestore();
     const uid = user.uid;
-
     console.log(`[D&C] Purga total para el UID: ${uid}`);
 
     try {
         const batch = db.batch();
 
-        // --- 1. BORRAR PERFIL Y SUBCOLECCIONES (users) ---
-        // Borramos los documentos de la subcolección 'amigos' para que no queden fantasmas
         const amigosSnapshot = await db.collection("users").doc(uid).collection("amigos").get();
         amigosSnapshot.forEach(doc => batch.delete(doc.ref));
         
-        // Borramos el documento principal del usuario
         const userRef = db.collection("users").doc(uid);
         batch.delete(userRef);
 
-        // --- 2. GESTIÓN DE DIARIOS (userId) ---
         const diariosSnapshot = await db.collection("diarios").where("userId", "==", uid).get();
-
         for (const diarioDoc of diariosSnapshot.docs) {
             const data = diarioDoc.data();
             const colaboradores = data.colaboradores || [];
             const otros = colaboradores.filter(id => id !== uid);
 
             if (otros.length === 0) {
-                // Si estaba solo, borramos diario y recuerdos
                 const recuerdos = await diarioDoc.ref.collection("recuerdos").get();
                 recuerdos.forEach(rec => batch.delete(rec.ref));
                 batch.delete(diarioDoc.ref);
             } else {
-                // Si es compartido, lo desvinculamos
                 batch.update(diarioDoc.ref, {
                     userId: null,
                     propietarioEstado: "eliminado",
@@ -47,18 +42,14 @@ exports.limpiezaDatosUsuario = auth.user().onDelete(async (user) => {
             }
         }
 
-        // --- 3. QUITAR DE DIARIOS AJENOS (colaboradores) ---
         const participaciones = await db.collection("diarios").where("colaboradores", "array-contains", uid).get();
         participaciones.forEach(doc => {
             if (doc.data().userId !== uid) {
-                batch.update(doc.ref, {
-                    colaboradores: admin.firestore.FieldValue.arrayRemove(uid)
-                });
+                batch.update(doc.ref, { colaboradores: admin.firestore.FieldValue.arrayRemove(uid) });
             }
         });
 
         await batch.commit();
-        console.log(`[D&C] Limpieza completa: Perfil, Amigos y Diarios eliminados.`);
         return null;
     } catch (error) {
         console.error("[D&C ERROR]", error);
@@ -66,44 +57,107 @@ exports.limpiezaDatosUsuario = auth.user().onDelete(async (user) => {
     }
 });
 
+// =========================================================================
+// 2. Solicitudes de Amistad (Sincronizado con Settings)
+// =========================================================================
 exports.notificarNuevaSolicitud = functions.firestore
-  .document("solicitudes/{solicitudId}") // <--- Aquí es donde vigila la colección global
+  .document("solicitudes/{solicitudId}")
   .onCreate(async (snap, context) => {
-    
     const datosSolicitud = snap.data();
-    const userId = datosSolicitud.receptorId; // El ID del que recibe la petición
-    const nombrePeticion = datosSolicitud.emisorMote || "Alguien"; // El mote del que la envía
+    const userId = datosSolicitud.receptorId; 
+    const nombrePeticion = datosSolicitud.emisorMote || "Alguien"; 
 
-    if (!userId) {
-        console.log("No se encontró receptorId en el documento de la solicitud.");
-        return null;
-    }
+    if (!userId) return null;
 
-    // 1. Buscamos el token del usuario que recibe la notificación
     const userDoc = await admin.firestore().collection("users").doc(userId).get();
-    const fcmToken = userDoc.data()?.fcmToken;
+    const userData = userDoc.data();
+    const fcmToken = userData?.fcmToken;
+    
+    // VERIFICACIÓN DE AJUSTES:
+    const quiereAmistad = userData?.preferenciasNotificaciones?.amistad !== false;
 
-    if (!fcmToken) {
-        console.log("No se encontró token FCM para el usuario receptor:", userId);
+    if (!fcmToken || !quiereAmistad) {
+        console.log("Token no encontrado o notificaciones apagadas para:", userId);
         return null;
     }
 
-    // 2. Preparamos el mensaje push universal
     const payload = {
-      notification: {
-        title: "¡Nueva solicitud de amistad!",
-        body: `${nombrePeticion} quiere ser tu amigo en Claud.`
-      },
+      notification: { title: "¡Nueva solicitud de amistad!", body: `${nombrePeticion} quiere ser tu amigo en Claudly.` },
       token: fcmToken
     };
 
-    // 3. Enviamos la notificación al dispositivo de forma nativa
+    try { await admin.messaging().send(payload); } catch (e) { console.error("Error push:", e); }
+    return null;
+  });
+
+// =========================================================================
+// 3. Invitación a Diarios (Sincronizado con Settings)
+// =========================================================================
+exports.notificarInvitacionDiario = functions.firestore
+  .document("diarios/{diarioId}")
+  .onUpdate(async (change, context) => {
+    const datosAntes = change.before.data();
+    const datosDespues = change.after.data();
+    const invitadosAntes = datosAntes.invitados || [];
+    const invitadosDespues = datosDespues.invitados || [];
+    
+    const nuevosInvitados = invitadosDespues.filter(id => !invitadosAntes.includes(id));
+    if (nuevosInvitados.length === 0) return null;
+
+    const nombreDiario = datosDespues.nombre || "un diario";
+
+    const promesas = nuevosInvitados.map(async (userId) => {
+        const userDoc = await admin.firestore().collection("users").doc(userId).get();
+        const userData = userDoc.data();
+        const fcmToken = userData?.fcmToken;
+        
+        // VERIFICACIÓN DE AJUSTES:
+        const quiereDiario = userData?.preferenciasNotificaciones?.diario !== false;
+
+        if (!fcmToken || !quiereDiario) return null;
+
+        const payload = {
+          notification: { title: "¡Nueva invitación a un diario!", body: `Te han invitado a colaborar en el diario '${nombreDiario}'.` },
+          token: fcmToken
+        };
+
+        try { await admin.messaging().send(payload); } catch (e) {}
+    });
+
+    await Promise.all(promesas);
+    return null;
+  });
+
+// =========================================================================
+// 4. Muro Global (Sincronizado con Settings)
+// =========================================================================
+exports.notificarNuevoMensajeMuro = functions.firestore
+  .document("muro/{mensajeId}")
+  .onCreate(async (snap, context) => {
+    const data = snap.data();
+    const autorId = data.autorId;
+    const esAdmin = data.tipo === "administrador";
+
+    const usersSnap = await admin.firestore().collection("users").get();
+    const tokens = [];
+
+    usersSnap.forEach(doc => {
+        const userData = doc.data();
+        // VERIFICACIÓN DE AJUSTES:
+        const quiereMuro = userData.preferenciasNotificaciones?.muro !== false;
+
+        if (doc.id !== autorId && userData.fcmToken && quiereMuro) {
+            tokens.push(userData.fcmToken);
+        }
+    });
+
+    if (tokens.length === 0) return null;
+
+    const tituloPush = esAdmin ? "📢 Anuncio de Claudly" : `Muro: Nuevo post de ${data.autor || "Alguien"}`;
+    const cuerpoPush = (data.mensaje || "").length > 60 ? data.mensaje.substring(0, 60) + "..." : data.mensaje;
+
     try {
-        await admin.messaging().send(payload);
-        console.log("Notificación push enviada con éxito al usuario:", userId);
-        return null;
-    } catch (error) {
-        console.error("Error al enviar la notificación push:", error);
-        return null;
-    }
+        await admin.messaging().sendEachForMulticast({ tokens: tokens, notification: { title: tituloPush, body: cuerpoPush } });
+    } catch (e) {}
+    return null;
   });

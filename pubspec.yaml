@@ -1,4 +1,4 @@
-name: claud
+name: claudly
 description: "A new Flutter project."
 publish_to: 'none'
 
@@ -38,6 +38,7 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.13.1
+  change_app_package_name: ^1.1.0
 
 flutter:
   uses-material-design: true
@@ -49,6 +50,17 @@ flutter:
     - assets\background\travel.jpg
     - assets\background\defaultDarkSheet.jpg
     - assets\profilePicture\toumáquet.png
+    - assets\stickers\Fiso.png
+    - assets\stickers\FisoGreen.png
+    - assets\stickers\FisoRed.png
+    - assets\stickers\FisoGrey.png
+    - assets\stickers\Pin.png
+    - assets\stickers\Clip.png
+    - assets\stickers\ClipFull.png
+    - assets\stickers\ClipFullGreen.png
+    - assets\stickers\ClipFullRed.png
+    - assets\stickers\ClipRed.png
+    - assets\stickers\ClipGreen.png
     
 flutter_icons:
   android: true

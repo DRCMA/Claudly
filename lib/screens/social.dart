@@ -88,6 +88,22 @@ class _SocialPageState extends State<SocialPage> with SingleTickerProviderStateM
     super.dispose();
   }
 
+ImageProvider? _obtenerImagenPerfil(String? ruta) {
+    if (ruta == null || ruta.trim().isEmpty) return null;
+
+    // 1. Si es un enlace de internet (ej. Google, Firebase Storage)
+    if (ruta.startsWith('http') || ruta.startsWith('https')) {
+      return NetworkImage(ruta);
+    } 
+    
+    // 2. Si es una imagen local predeterminada de la app
+    // Nota: Si en base de datos solo guardaste "toumáquet.png", 
+    // aquí le añadimos la carpeta donde suela estar (por ejemplo 'assets/')
+    String rutaFinal = ruta.contains('/') ? ruta : 'assets/$ruta';
+    
+    return AssetImage(rutaFinal);
+  }
+
   void _escucharDatosRealTime() {
     if (miId == null) return;
     _amigosSub = FirebaseFirestore.instance
@@ -242,15 +258,13 @@ class _SocialPageState extends State<SocialPage> with SingleTickerProviderStateM
       separatorBuilder: (_, _) => Divider(color: Colors.white.withValues(alpha: 0.1), height: 1),
       itemBuilder: (context, i) {
         var data = _amigosLocal[i].data() as Map<String, dynamic>;
+        String? foto = data['photoURL']?.toString();
+
         return ListTile(
           leading: CircleAvatar(
             backgroundColor: Colors.white10,
-            backgroundImage: (data['photoURL'] != null && data['photoURL'].toString().isNotEmpty)
-                ? NetworkImage(data['photoURL'])
-                : null,
-            child: (data['photoURL'] == null || data['photoURL'].toString().isEmpty)
-                ? Icon(Icons.person, color: iconColor)
-                : null,
+            backgroundImage: _obtenerImagenPerfil(foto),
+            child: _obtenerImagenPerfil(foto) == null ? Icon(Icons.person, color: iconColor) : null,
           ),
           title: Text(
             data['mote'] ?? "Amigo", 
@@ -265,7 +279,7 @@ class _SocialPageState extends State<SocialPage> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildListaSolicitudesFix(Color iconColor) {
+ Widget _buildListaSolicitudesFix(Color iconColor) {
     if (_cargandoSolicitudes && _solicitudesLocal.isEmpty) {
       return const Center(child: CircularProgressIndicator(color: Colors.white70));
     }
@@ -275,15 +289,13 @@ class _SocialPageState extends State<SocialPage> with SingleTickerProviderStateM
       itemCount: _solicitudesLocal.length,
       itemBuilder: (context, i) {
         var data = _solicitudesLocal[i].data() as Map<String, dynamic>;
+        String? foto = data['emisorFoto']?.toString();
+
         return ListTile(
           leading: CircleAvatar(
             backgroundColor: Colors.white10,
-            backgroundImage: (data['emisorFoto'] != null && data['emisorFoto'].toString().isNotEmpty)
-                ? NetworkImage(data['emisorFoto'])
-                : null,
-            child: (data['emisorFoto'] == null || data['emisorFoto'].toString().isEmpty)
-                ? Icon(Icons.person, color: iconColor)
-                : null,
+            backgroundImage: _obtenerImagenPerfil(foto),
+            child: _obtenerImagenPerfil(foto) == null ? Icon(Icons.person, color: iconColor) : null,
           ),
           title: Text(
             data['emisorMote'] ?? "Usuario",
@@ -309,8 +321,7 @@ class _SocialPageState extends State<SocialPage> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildTabBuscar(Color cardColor, bool isDark) {
-    // Calculamos de forma segura tu propio código ID Social de 6 caracteres
+Widget _buildTabBuscar(Color cardColor, bool isDark) {
     final String miSocialId = (miId != null && miId!.length >= 6) 
         ? miId!.substring(0, 6).toUpperCase() 
         : (miId ?? "");
@@ -319,7 +330,7 @@ class _SocialPageState extends State<SocialPage> with SingleTickerProviderStateM
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
-          // --- APARTADO NUEVO: TU PROPIO SOCIAL ID (CON COPIADO AL PORTAPAPELES) ---
+          // (Tu código de GestureDetector para copiar el ID sigue igual...)
           GestureDetector(
             onTap: () {
               Clipboard.setData(ClipboardData(text: miSocialId));
@@ -342,7 +353,7 @@ class _SocialPageState extends State<SocialPage> with SingleTickerProviderStateM
                   const Icon(Icons.copy, size: 14, color: Color(0xFFFFD54F)),
                   const SizedBox(width: 8),
                   Text(
-                    miSocialId,
+                    "Mi ID Social: $miSocialId",
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                 ],
@@ -376,10 +387,11 @@ class _SocialPageState extends State<SocialPage> with SingleTickerProviderStateM
               ),
               child: ListTile(
                 leading: CircleAvatar(
-                  backgroundImage: _usuarioEncontrado!['photoURL'] != null 
-                    ? NetworkImage(_usuarioEncontrado!['photoURL']) 
-                    : null,
-                  child: _usuarioEncontrado!['photoURL'] == null ? const Icon(Icons.person) : null,
+                  backgroundColor: Colors.white10,
+                  backgroundImage: _obtenerImagenPerfil(_usuarioEncontrado!['photoURL']?.toString()),
+                  child: _obtenerImagenPerfil(_usuarioEncontrado!['photoURL']?.toString()) == null 
+                      ? const Icon(Icons.person) 
+                      : null,
                 ),
                 title: Text(_usuarioEncontrado!['mote'] ?? "Usuario", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 trailing: IconButton(

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:developer' as dev;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:claudly/services/config_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
@@ -51,6 +52,20 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
     'Azul': const Color(0xFF00FFFF),
     'Rosa': const Color(0xFFFF00FF),
   };
+
+  final List<String> _stickersDisponibles = [
+    'assets/stickers/Fiso.png',
+    'assets/stickers/FisoGreen.png',
+    'assets/stickers/FisoRed.png',
+    'assets/stickers/FisoGrey.png',
+    'assets/stickers/Clip.png',
+    'assets/stickers/ClipRed.png',
+    'assets/stickers/ClipGreen.png',
+    'assets/stickers/ClipFull.png',
+    'assets/stickers/ClipFullRed.png',
+    'assets/stickers/ClipFullGreen.png',
+    'assets/stickers/Pin.png',
+  ];
 
   @override
   void initState() {
@@ -450,24 +465,41 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
                 ), 
             ],
           ),
-          floatingActionButton: _estaArrastrando ? null : Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              FloatingActionButton.small(
-                heroTag: "btn_t",
-                onPressed: _estaCargando ? null : _addTexto,
-                backgroundColor: Colors.white,
-                child: const Icon(Icons.text_fields, color: Colors.indigo),
-              ),
-              const SizedBox(height: 12),
-              FloatingActionButton(
-                heroTag: "btn_f",
-                onPressed: _estaCargando ? null : _addFoto,
-                backgroundColor: Colors.indigo,
-                child: const Icon(Icons.add_a_photo, color: Colors.white),
-              ),
-            ],
-          ), 
+          floatingActionButton: _estaArrastrando ?
+              null : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Botón de texto actual
+                    FloatingActionButton.small(
+                      heroTag: "btn_t",
+                      onPressed: _estaCargando ? null : _addTexto,
+                      backgroundColor: Colors.white,
+                      child: const Icon(Icons.text_fields, color: Colors.indigo),
+                    ),
+                    const SizedBox(height: 12),
+                    // Fila que sitúa el botón del Sticker a la izquierda del de la cámara
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // --- NUEVO BOTÓN DE STICKERS (Mismo formato que el de texto) ---
+                        FloatingActionButton.small(
+                          heroTag: "btn_s",
+                          onPressed: _estaCargando ? null : _mostrarBottomSheetStickers,
+                          backgroundColor: Colors.white,
+                          child: const Icon(Icons.emoji_emotions, color: Colors.indigo),
+                        ),
+                        const SizedBox(width: 12),
+                        // Botón de la cámara actual
+                        FloatingActionButton(
+                          heroTag: "btn_f",
+                          onPressed: _estaCargando ? null : _addFoto,
+                          backgroundColor: Colors.indigo,
+                          child: const Icon(Icons.add_a_photo, color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
         ),
       ),
     );
@@ -544,7 +576,28 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
           ),
         ),
       );
-    } else {
+    } else if (item['tipo'] == 'sticker') {
+      final bool esSeleccionado = _idElementoSeleccionado == item['id'];
+      final double anchoReal = (item['ancho'] as num? ?? 100.0).toDouble();
+      return Container(
+        constraints: BoxConstraints(maxWidth: anchoReal + 16),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          // Sin fondo blanco para que conserve la transparencia PNG en el folio,
+          // pero manteniendo el borde azul interactivo al seleccionarlo
+          border: Border.all(
+            color: esSeleccionado ? Colors.blue : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Image.asset(
+          item['rutaAsset'],
+          fit: BoxFit.contain,
+          width: anchoReal,
+        ),
+      );
+    } 
+    else {
       return _buildTextFieldElement(item);
     }
   }
@@ -793,6 +846,84 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
       ),
     );
   }
+
+void _mostrarBottomSheetStickers() {
+    if (elementos.length >= 12) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: ConfigController.getHeaderColor(),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Selecciona un Sticker",
+                  style: TextStyle(
+                    fontSize: 18, 
+                    fontWeight: FontWeight.bold, 
+                    color: Colors.indigo
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Cuadrícula en hileras de tres (crossAxisCount: 3)
+                Flexible(
+                child: GridView.count(
+                  shrinkWrap: true,
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  children: _stickersDisponibles.map((ruta) {
+                    return GestureDetector(
+                      onTap: () {
+                        Navigator.pop(context); // Cierra el menú
+                        _addSticker(ruta); // Añade el sticker seleccionado
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.all(8),
+                        child: Image.asset(ruta, fit: BoxFit.contain),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+void _addSticker(String rutaAsset) {
+    if (elementos.length >= 12) return;
+    setState(() {
+      final nuevoId = DateTime.now().millisecondsSinceEpoch;
+      elementos.add({
+        'id': nuevoId,
+        'tipo': 'sticker',
+        'rutaAsset': rutaAsset,
+        'x': 100.0,
+        'y': 150.0,
+        'angulo': 0.0,
+        'ancho': 100.0, // Tamaño inicial ideal para stickers
+      });
+      _idElementoSeleccionado = nuevoId;
+    });
+  }
+
 }
 
 class DiarioTextController extends TextEditingController {

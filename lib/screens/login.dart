@@ -24,7 +24,7 @@ class _LoginPageState extends State<LoginPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(Icons.favorite, size: 80, color: Colors.indigo),
-            const Text("Claud", style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
+            const Text("Claudly", style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
             const SizedBox(height: 50),
             OutlinedButton.icon(
               onPressed: () => _authService..signInWithGoogle(),

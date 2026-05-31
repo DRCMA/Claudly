@@ -57,7 +57,7 @@ class _MiDiarioAppState extends State<MiDiarioApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Claud',
+      title: 'Claudly',
       debugShowCheckedModeBanner: false,
 
       localizationsDelegates: const [
