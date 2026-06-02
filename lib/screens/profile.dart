@@ -33,7 +33,10 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
   bool _subiendoImagen = false;
 
   final List<Map<String, String>> _avataresPredeterminados = [
-    {"nombre": "Tomatito", "url": "assets/profilePicture/toumáquet.png", "tipo": "asset"},
+    {"nombre": "Tomatito", "url": "assets/profilePicture/toumáquet.png", "tipo": "asset",},
+    {"nombre": "CaraRoja", "url": "assets/profilePicture/caraVermella.png", "tipo": "asset"},
+    {"nombre": "Bread", "url": "assets/profilePicture/bread.png", "tipo": "asset"},
+    {"nombre": "Nina", "url": "assets/profilePicture/NinaProfile.png", "tipo": "asset"}
   ];
 
   final List<String> _paises = [

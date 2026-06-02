@@ -65,6 +65,18 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
     'assets/stickers/ClipFullRed.png',
     'assets/stickers/ClipFullGreen.png',
     'assets/stickers/Pin.png',
+    'assets/stickers/toumáquetSticker.png',
+    'assets/stickers/caraVermellaSticker.png',
+    'assets/stickers/breadSticker.png',
+    'assets/stickers/sun.png',
+    'assets/stickers/snowFlake.png',
+    'assets/stickers/fallenLeaf.png',
+    'assets/stickers/sakura.png',
+    'assets/stickers/heartHappy.png',
+    'assets/stickers/heartSad.png',
+    'assets/stickers/heartStupid.png',
+    'assets/stickers/pizza.png',
+    'assets/stickers/Nina.png'
   ];
 
   @override
@@ -396,32 +408,34 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
 
                                   ...elementos.map((item) {
                                     final bool esSeleccionado = _idElementoSeleccionado == item['id'];
-                                    return TransformableElement(
+                                    final bool hayAlgoSeleccionado = _idElementoSeleccionado != null;
+
+                                    Widget elementoWidget = TransformableElement(
                                       key: ValueKey(item['id']),
                                       item: item,
                                       maxWidth: constraints.maxWidth,
-                                      maxHeight: areaUtilAltura, 
-                                      isSelected: esSeleccionado,
+                                      maxHeight: areaUtilAltura,
+                                      isSelected: esSeleccionado, 
                                       onSelect: () {
                                         setState(() {
-                                          _idElementoSeleccionado = item['id'];
+                                          _idElementoSeleccionado = item['id']; 
                                           _idEditandoTexto = null;
-                                          _menuAbierto = '';
-                                          final index = elementos.indexOf(item);
+                                          _menuAbierto = ''; 
+                                          final index = elementos.indexOf(item); 
                                           if (index != -1) {
                                             elementos.add(elementos.removeAt(index));
-                                          }
+                                          } 
                                         });
                                       }, 
-                                      onChanged: () => setState(() {}),
+                                      onChanged: () => setState(() {}), 
                                       onDraggingChanged: (dragging) {
                                         setState(() {
-                                          _estaArrastrando = dragging;
+                                          _estaArrastrando = dragging; 
                                           if (!dragging && _estaEncimaDePapelera) {
-                                            elementos.removeWhere((e) => e['id'] == item['id']);
-                                            _idElementoSeleccionado = null;
+                                            elementos.removeWhere((e) => e['id'] == item['id']); 
+                                            _idElementoSeleccionado = null; 
                                           }
-                                          if (!dragging) _estaEncimaDePapelera = false;
+                                          if (!dragging) _estaEncimaDePapelera = false; 
                                         });
                                       }, 
                                       onPositionChanged: (y) {
@@ -432,14 +446,24 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
                                         }
                                       }, 
                                       onDelete: () => setState(() {
-                                        elementos.removeWhere((e) => e['id'] == item['id']);
+                                        elementos.removeWhere((e) => e['id'] == item['id']); 
                                         _idElementoSeleccionado = null;
                                         _estaArrastrando = false;
                                         _estaEncimaDePapelera = false;
                                       }), 
-                                      child: _buildElemento(item),
+                                      child: _buildElemento(item), 
                                     );
-                                  }), 
+
+                                    // --- FILTRO DE SEGURIDAD PARA PASAR TOQUES DE LARGO ---
+                                    if (hayAlgoSeleccionado && !esSeleccionado) {
+                                      return IgnorePointer(
+                                        ignoring: true, // Hace que este elemento sea transparente a los clics
+                                        child: elementoWidget,
+                                      );
+                                    }
+
+                                    return elementoWidget;
+                                  }),
                                 ],
                               ),
                             ),
@@ -465,11 +489,13 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
                 ), 
             ],
           ),
-          floatingActionButton: _estaArrastrando ?
-              null : Column(
+          floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+          floatingActionButton: _estaArrastrando
+              ? null
+              : Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    // Botón de texto actual
                     FloatingActionButton.small(
                       heroTag: "btn_t",
                       onPressed: _estaCargando ? null : _addTexto,
@@ -477,26 +503,18 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
                       child: const Icon(Icons.text_fields, color: Colors.indigo),
                     ),
                     const SizedBox(height: 12),
-                    // Fila que sitúa el botón del Sticker a la izquierda del de la cámara
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // --- NUEVO BOTÓN DE STICKERS (Mismo formato que el de texto) ---
-                        FloatingActionButton.small(
-                          heroTag: "btn_s",
-                          onPressed: _estaCargando ? null : _mostrarBottomSheetStickers,
-                          backgroundColor: Colors.white,
-                          child: const Icon(Icons.emoji_emotions, color: Colors.indigo),
-                        ),
-                        const SizedBox(width: 12),
-                        // Botón de la cámara actual
-                        FloatingActionButton(
-                          heroTag: "btn_f",
-                          onPressed: _estaCargando ? null : _addFoto,
-                          backgroundColor: Colors.indigo,
-                          child: const Icon(Icons.add_a_photo, color: Colors.white),
-                        ),
-                      ],
+                    FloatingActionButton.small(
+                      heroTag: "btn_s",
+                      onPressed: _estaCargando ? null : _mostrarBottomSheetStickers,
+                      backgroundColor: Colors.white,
+                      child: const Icon(Icons.emoji_emotions, color: Colors.indigo),
+                    ),
+                    const SizedBox(height: 12),
+                    FloatingActionButton(
+                      heroTag: "btn_f",
+                      onPressed: _estaCargando ? null : _addFoto,
+                      backgroundColor: Colors.indigo,
+                      child: const Icon(Icons.add_a_photo, color: Colors.white),
                     ),
                   ],
                 ),
@@ -507,13 +525,16 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
 
   // --- WIDGETS AUXILIARES ---
 
-  Widget _buildElemento(Map<String, dynamic> item) {
-    if (item['tipo'] == 'foto') {
+ Widget _buildElemento(Map<String, dynamic> item) {
+    // Calculamos el ancho real aquí para todos los elementos (por defecto 150 para fotos, 100 para stickers)
+    final double anchoReal = (item['ancho'] as num? ?? (item['tipo'] == 'sticker' ? 100.0 : 150.0)).toDouble();
+
+    // 1. SI ES FOTO O IMAGEN
+    if (item['tipo'] == 'foto' || item['tipo'] == 'imagen') {
       final bool esLocal = item['archivoLocal'] != null;
       final bool esSeleccionado = _idElementoSeleccionado == item['id'];
       final String pieFoto = item['pieFoto'] ?? "";
       final bool tieneTexto = pieFoto.isNotEmpty;
-      final double anchoReal = (item['ancho'] as num? ?? 150.0).toDouble();
 
       return GestureDetector(
         onDoubleTap: () {
@@ -522,20 +543,21 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
           }
         },
         child: Container(
-          constraints: BoxConstraints(maxWidth: anchoReal + 16),
+          width: anchoReal, // CLAVE: El contenedor obliga a todo a medir este ancho
           padding: EdgeInsets.fromLTRB(8, 8, 8, (esSeleccionado || tieneTexto) ? 20 : 8),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(2),
+            // Este borde ocupa 2 píxeles de grosor (4 píxeles en total por lado)
             border: Border.all(
               color: esSeleccionado ? Colors.blue : Colors.transparent,
               width: 2,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2), 
-                blurRadius: 10, 
-                offset: const Offset(3, 5)
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 8,
+                offset: const Offset(2, 4)
               )
             ],
           ),
@@ -543,32 +565,27 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              esLocal
-                  ? Image.file(item['archivoLocal'], fit: BoxFit.contain, width: anchoReal, cacheWidth: 400)
-                  : CachedNetworkImage(
-                      imageUrl: item['url'],
-                      fit: BoxFit.contain,
-                      width: anchoReal,
-                      placeholder: (context, url) => const SizedBox(
-                        height: 100, 
-                        child: Center(child: CircularProgressIndicator(strokeWidth: 2))
-                      ),
-                      errorWidget: (context, url, error) => const Icon(Icons.cloud_off),
+              esLocal 
+                ? Image.file(item['archivoLocal'], fit: BoxFit.contain) 
+                : CachedNetworkImage(
+                    imageUrl: item['url'] ?? "",
+                    fit: BoxFit.contain,
+                    placeholder: (context, url) => const SizedBox(
+                      height: 100,
+                      child: Center(child: CircularProgressIndicator(strokeWidth: 2))
                     ),
-              
-              if (esSeleccionado || tieneTexto)
+                    errorWidget: (context, url, error) => const Icon(Icons.cloud_off),
+                  ),
+              if (esSeleccionado || tieneTexto) 
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
-                  child: SizedBox(
-                    width: anchoReal,
-                    child: Text(
-                      tieneTexto ? pieFoto : (esSeleccionado ? "Doble clic..." : ""),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontFamily: 'Courier', 
-                        fontSize: 12,
-                        color: Colors.black87,
-                      ),
+                  child: Text(
+                    tieneTexto ? pieFoto : (esSeleccionado ? "Doble clic..." : ""),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontFamily: 'Courier',
+                      fontSize: 12,
+                      color: Colors.black87,
                     ),
                   ),
                 ),
@@ -576,27 +593,27 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
           ),
         ),
       );
-    } else if (item['tipo'] == 'sticker') {
+    } 
+    // 2. SI ES STICKER
+    else if (item['tipo'] == 'sticker') {
       final bool esSeleccionado = _idElementoSeleccionado == item['id'];
-      final double anchoReal = (item['ancho'] as num? ?? 100.0).toDouble();
       return Container(
-        constraints: BoxConstraints(maxWidth: anchoReal + 16),
+        width: anchoReal, // CLAVE: Mismo ancho estricto para el sticker
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          // Sin fondo blanco para que conserve la transparencia PNG en el folio,
-          // pero manteniendo el borde azul interactivo al seleccionarlo
+          // El borde transparente garantiza que mida exactamente lo mismo que al seleccionarlo
           border: Border.all(
             color: esSeleccionado ? Colors.blue : Colors.transparent,
             width: 2,
           ),
         ),
         child: Image.asset(
-          item['rutaAsset'],
+          item['rutaAsset'] ?? 'assets/stickers/Fiso.png',
           fit: BoxFit.contain,
-          width: anchoReal,
         ),
       );
     } 
+    // 3. SI ES TEXTO
     else {
       return _buildTextFieldElement(item);
     }
@@ -849,7 +866,6 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
 
 void _mostrarBottomSheetStickers() {
     if (elementos.length >= 12) return;
-
     showModalBottomSheet(
       context: context,
       backgroundColor: ConfigController.getHeaderColor(),
@@ -858,48 +874,51 @@ void _mostrarBottomSheetStickers() {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Selecciona un Sticker",
-                  style: TextStyle(
-                    fontSize: 18, 
-                    fontWeight: FontWeight.bold, 
-                    color: Colors.indigo
+        // --- LIMITAMOS ALTO A 1/3 DE LA PANTALLA ---
+        return SizedBox(
+          height: MediaQuery.of(context).size.height / 3,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Selecciona un Sticker",
+                    style: TextStyle(
+                      fontSize: 18, 
+                      fontWeight: FontWeight.bold, 
+                      color: Colors.indigo
+                    ), 
                   ),
-                ),
-                const SizedBox(height: 16),
-                // Cuadrícula en hileras de tres (crossAxisCount: 3)
-                Flexible(
-                child: GridView.count(
-                  shrinkWrap: true,
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  children: _stickersDisponibles.map((ruta) {
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.pop(context); // Cierra el menú
-                        _addSticker(ruta); // Añade el sticker seleccionado
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey[100],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.all(8),
-                        child: Image.asset(ruta, fit: BoxFit.contain),
-                      ),
-                    );
-                  }).toList(),
-                ),
-                ),
-              ],
+                  const SizedBox(height: 16), 
+                  Flexible(
+                    child: GridView.count(
+                      shrinkWrap: true,
+                      crossAxisCount: 3, 
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      children: _stickersDisponibles.map((ruta) {
+                        return GestureDetector(
+                          onTap: () {
+                            Navigator.pop(context); 
+                            _addSticker(ruta);
+                          },
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(12), 
+                            ),
+                            padding: const EdgeInsets.all(8),
+                            child: Image.asset(ruta, fit: BoxFit.contain), 
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );

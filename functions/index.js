@@ -141,9 +141,9 @@ exports.notificarNuevoMensajeMuro = functions.firestore
     const usersSnap = await admin.firestore().collection("users").get();
     const tokens = [];
 
+    // 1. Recopilamos todos los tokens válidos
     usersSnap.forEach(doc => {
         const userData = doc.data();
-        // VERIFICACIÓN DE AJUSTES:
         const quiereMuro = userData.preferenciasNotificaciones?.muro !== false;
 
         if (doc.id !== autorId && userData.fcmToken && quiereMuro) {
@@ -151,13 +151,33 @@ exports.notificarNuevoMensajeMuro = functions.firestore
         }
     });
 
-    if (tokens.length === 0) return null;
+    if (tokens.length === 0) {
+        console.log("No hay usuarios a los que notificar en el muro.");
+        return null;
+    }
 
     const tituloPush = esAdmin ? "📢 Anuncio de Claudly" : `Muro: Nuevo post de ${data.autor || "Alguien"}`;
     const cuerpoPush = (data.mensaje || "").length > 60 ? data.mensaje.substring(0, 60) + "..." : data.mensaje;
 
-    try {
-        await admin.messaging().sendEachForMulticast({ tokens: tokens, notification: { title: tituloPush, body: cuerpoPush } });
-    } catch (e) {}
+    // 2. SOLUCIÓN: Usamos el mismo método exacto que usas en las invitaciones de diario
+    const promesas = tokens.map(async (fcmToken) => {
+        const payload = {
+            notification: { 
+                title: tituloPush, 
+                body: cuerpoPush 
+            },
+            token: fcmToken // Se lo mandamos individualmente
+        };
+
+        try { 
+            await admin.messaging().send(payload); 
+            console.log("Notificación enviada con éxito.");
+        } catch (e) { 
+            console.error("Error al enviar push de muro:", e); 
+        }
+    });
+
+    // Esperamos a que salgan todas las notificaciones
+    await Promise.all(promesas);
     return null;
   });

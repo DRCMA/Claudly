@@ -50,6 +50,8 @@ flutter:
     - assets\background\travel.jpg
     - assets\background\defaultDarkSheet.jpg
     - assets\profilePicture\toumáquet.png
+    - assets\profilePicture\caraVermella.png
+    - assets\profilePicture\bread.png
     - assets\stickers\Fiso.png
     - assets\stickers\FisoGreen.png
     - assets\stickers\FisoRed.png
@@ -61,6 +63,22 @@ flutter:
     - assets\stickers\ClipFullRed.png
     - assets\stickers\ClipRed.png
     - assets\stickers\ClipGreen.png
+    - assets\stickers\toumáquetSticker.png
+    - assets\stickers\caraVermellaSticker.png
+    - assets\stickers\breadSticker.png
+    - assets\stickers\sun.png
+    - assets\stickers\snowFlake.png
+    - assets\stickers\fallenLeaf.png
+    - assets\stickers\heartHappy.png
+    - assets\stickers\heartSad.png
+    - assets\stickers\heartStupid.png
+    - assets\stickers\sakura.png
+    - assets\stickers\pizza.png
+    - assets\post-its\post-itGreen.png
+    - assets\post-its\post-itRed.png
+    - assets\post-its\post-itBlue.png
+    - assets\post-its\post-itYellow.png
+    - assets\stickers\Nina.png
     
 flutter_icons:
   android: true

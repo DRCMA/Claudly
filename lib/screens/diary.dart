@@ -478,92 +478,189 @@ class _DiaryPageState extends State<DiaryPage> {
 
 }
 
-  Widget _buildPostIt(Map<String, dynamic> marcador) {
+ Widget _buildPostIt(Map<String, dynamic> marcador) {
+    final int color = marcador['color'] ?? 0xFFFFF176;
+    final String texto = marcador['texto']?.toString().toUpperCase() ?? '';
+
+    // Mapa de color → asset PNG del post-it
+    const Map<int, String> postItAssets = {
+      0xFFCCFF90: 'assets/post-its/post-itGreen.png',
+      0xFF80D8FF: 'assets/post-its/post-itBlue.png',
+      0xFFFF8A80: 'assets/post-its/post-itRed.png',
+      0xFFFFF176: 'assets/post-its/post-itYellow.png'
+    };
+    final String? asset = postItAssets[color];
+
     return Positioned(
-      top: 0,
+      top: -10, // Ajustado para que cuelgue de forma natural desde el borde
       right: 50,
-      child: Transform.rotate(
-        angle: -0.05,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: Color(marcador['color'] ?? 0xFFFFF176),
-             boxShadow: const [
-              BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(2, 2))
-            ],
+      child: GestureDetector(
+        onTap: () {
+          // --- VENTANITA EMERGENTE AL PULSAR ---
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: Color(color), // El fondo toma el color del marcador
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              contentPadding: const EdgeInsets.all(25),
+              content: Text(
+                texto,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontFamily: 'Courier',
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+          );
+        },
+        child: Transform.rotate(
+          angle: -96.0, // <-- Totalmente recto, sin inclinación
+          child: asset != null
+              // ── MARCADOR CON IMAGEN PNG (Vacío) ──────────────────────────
+              ? SizedBox(
+                  width: 50,  // Reducido un poco para que quede estético al no tener texto
+                  height: 60,
+                  child: Image.asset(
+                    asset,
+                    fit: BoxFit.fill,
+                  ),
+                )
+              // ── MARCADOR CON RECTÁNGULO DE COLOR (Vacío) ─────────────────
+              : Container(
+                  width: 35,  // Ancho fijo del marcador
+                  height: 55, // Largo fijo del marcador
+                  decoration: BoxDecoration(
+                    color: Color(color),
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(4)), // Bordes inferiores suaves
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 4,
+                        offset: Offset(2, 2),
+                      ),
+                    ],
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+
+Widget _buildElementoEstatico(Map<String, dynamic> item) {
+    final double angulo = (item['angulo'] ?? item['rotacion'] ?? 0.0).toDouble();
+    final double anchoReal = (item['ancho'] as num? ?? (item['tipo'] == 'sticker' ? 100.0 : 150.0)).toDouble();
+    // TransformableElement envuelve el child con padding: EdgeInsets.all(10).
+    // En diary no existe ese wrapper, así que lo replicamos con un Padding
+    // para que el tamaño visual sea idéntico al del editor.
+    const double paddingTransformable = 10.0;
+
+    // 1. SI ES FOTO O IMAGEN
+    if (item['tipo'] == 'foto' || item['tipo'] == 'imagen') {
+      final String pieFoto = item['pieFoto'] ?? "";
+      final bool tieneTexto = pieFoto.isNotEmpty;
+      final double anchoImagen = anchoReal - 16 - 4; // padding interno (8+8) + borde (2+2)
+
+      return Transform.rotate(
+        angle: angulo,
+        child: Padding(
+          padding: const EdgeInsets.all(paddingTransformable),
+          child: Container(
+            width: anchoReal,
+            padding: EdgeInsets.fromLTRB(8, 8, 8, tieneTexto ? 20 : 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(2),
+              border: Border.all(color: Colors.transparent, width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 8,
+                  offset: const Offset(2, 4),
+                )
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CachedNetworkImage(
+                  imageUrl: item['url'] ?? "",
+                  width: anchoImagen,
+                  fit: BoxFit.contain,
+                  placeholder: (context, url) => const SizedBox(
+                      width: 30,
+                      height: 30,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                  errorWidget: (context, url, error) => const Icon(Icons.broken_image),
+                ),
+                if (tieneTexto)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      pieFoto,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontFamily: 'Courier',
+                        fontSize: 12,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
+        ),
+      );
+    }
+    // 2. SI ES STICKER
+    else if (item['tipo'] == 'sticker') {
+      return Transform.rotate(
+        angle: angulo,
+        child: Padding(
+          padding: const EdgeInsets.all(paddingTransformable),
+          child: Container(
+            width: anchoReal,
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.transparent, width: 2),
+            ),
+            child: Image.asset(
+              item['rutaAsset'] ?? 'assets/stickers/Fiso.png',
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // 3. SI ES TEXTO
+    final double anchoTexto = (item['ancho'] ?? 200.0).toDouble();
+
+    return Transform.rotate(
+      angle: angulo,
+      child: Padding(
+        padding: const EdgeInsets.all(paddingTransformable),
+        child: Container(
+          width: anchoTexto,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
           child: Text(
-            marcador['texto']?.toString().toUpperCase() ?? '',
-            style: const TextStyle(
-                 fontFamily: 'Courier', fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black),
+            item['texto'] ?? '',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Color(item['color'] ?? 0xFF000000),
+              fontSize: (anchoTexto / 10).clamp(14.0, 50.0),
+              fontWeight: item['isBold'] == true ? FontWeight.bold : FontWeight.normal,
+              fontStyle: item['isItalic'] == true ? FontStyle.italic : FontStyle.normal,
+              backgroundColor: Color(item['backgroundColor'] ?? 0x00000000),
+            ),
           ),
         ),
       ),
     );
+  }
 
-}
-
-  Widget _buildElementoEstatico(Map<String, dynamic> item) {
-    final double angulo = (item['angulo'] ?? item['rotacion'] ?? 0.0).toDouble();
-
-    if (item['tipo'] == 'foto' || item['tipo'] == 'imagen') {
-      return Transform.rotate(
-        angle: angulo,
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: const BoxDecoration(
-              color: Colors.white,
-              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]),
-          
- child: CachedNetworkImage(
-            imageUrl: item['url'] ?? "",
-            width: (item['ancho'] ?? 150).toDouble(),
-            placeholder: (context, url) => const SizedBox(
-                width: 30,
-                height: 30,
-                child: CircularProgressIndicator()),
-             errorWidget: (context, url, error) =>
-                const Icon(Icons.broken_image),
-          ),
-        ),
-      );
-
-}
-
-else if (item['tipo'] == 'sticker') {
-      return Transform.rotate(
-        angle: angulo,
-        child: Image.asset(
-          item['rutaAsset'] ?? 'assets/stickers/Fiso.png', // Carga el asset local directamente
-          width: (item['ancho'] ?? 100).toDouble(),
-          fit: BoxFit.contain,
-        ),
-      );
-    }
-    
-    double anchoTexto = (item['ancho'] ?? 200.0).toDouble();
-
-    return Transform.rotate(
-      angle: angulo,
-      child: SizedBox(
-        width: anchoTexto,
-        child: Text(
-          item['texto'] ?? '',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Color(item['color'] ?? 0xFF000000),
-            fontSize: (anchoTexto / 10).clamp(14.0, 50.0),
-             fontWeight:
-                item['isBold'] == true ? FontWeight.bold : FontWeight.normal,
-            fontStyle:
-                item['isItalic'] == true ? FontStyle.italic : FontStyle.normal,
-            backgroundColor: Color(item['backgroundColor'] ?? 0x00000000),
-          ),
-        ),
-       ),
-    );
-
-}
 
   Widget _buildHojaEnBlanco() {
     final bool isDark = ConfigController.isDarkMode;
@@ -581,15 +678,12 @@ else if (item['tipo'] == 'sticker') {
               Text("Nuevo recuerdo",
                   style: TextStyle(
                       fontFamily: 'Georgia',
-                      color: isDark ? Colors.white38 : 
-
- Colors.grey)),
+                      color: isDark ? Colors.white38 : Colors.grey)),
             ],
           ),
         ),
       ),
     );
-
 }
 
   Widget _buildMenu(String docId, Map<String, dynamic> data, List elementos) {
@@ -725,10 +819,14 @@ if (mounted) {
             children: [
               TextField(
                 controller: txtCtrl,
+                maxLength: 14,
                 decoration: const InputDecoration(
-                     hintText: "Nombre...",
-                    focusedBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: Colors.brown))),
+                  hintText: "Nombre...",
+                  counterStyle: TextStyle(fontSize: 11, color: Colors.grey),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.brown),
+                  ),
+                ),
                 textCapitalization: TextCapitalization.characters,
               ),
               const 
