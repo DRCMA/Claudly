@@ -108,25 +108,62 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
   }
 
   void _addFoto() async {
-    if (elementos.length >= 12) return;
-    final ImagePicker picker = ImagePicker();
-    final XFile? img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
+    // 1. Contamos fotos y elementos actuales
+    int fotosActuales = elementos.where((e) => e['tipo'] == 'foto' || e['tipo'] == 'imagen').length;
+    int elementosActuales = elementos.length;
 
-    if (img != null) {
+    // 2. Calculamos los huecos disponibles
+    int espacioParaFotos = 6 - fotosActuales;
+    int espacioTotal = 12 - elementosActuales;
+    
+    // El límite real será el número más pequeño entre el espacio de fotos y el espacio total
+    int limite = espacioParaFotos < espacioTotal ? espacioParaFotos : espacioTotal;
+
+    // Si ya no caben más, avisamos al usuario y cancelamos
+    if (limite <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Límite alcanzado: Máximo 6 fotos y 12 elementos por recuerdo."),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final ImagePicker picker = ImagePicker();
+    // 3. Abrimos la galería permitiendo selección múltiple
+    final List<XFile> imgs = await picker.pickMultiImage(imageQuality: 50);
+
+    if (imgs.isNotEmpty) {
+      // 4. Si el usuario selecciona más de las que caben, cortamos la lista hasta el límite
+      final imagenesAProcesar = imgs.take(limite).toList();
+
       setState(() {
-        final nuevoId = DateTime.now().millisecondsSinceEpoch;
-        elementos.add({
-          'id': nuevoId,
-          'tipo': 'foto',
-          'archivoLocal': File(img.path),
-          'url': '',
-          'pieFoto': '',
-          'x': 50.0,
-          'y': 100.0,
-          'angulo': 0.0,
-          'ancho': 150.0,
-        });
-        _idElementoSeleccionado = nuevoId;
+        for (int i = 0; i < imagenesAProcesar.length; i++) {
+          // Desplazamiento para que las fotos no caigan exactamente una encima de la otra (Efecto cascada)
+          double offset = i * 20.0;
+          
+          // Sumamos 'i' al timestamp para garantizar que los IDs sean únicos si el bucle es muy rápido
+          final nuevoId = DateTime.now().millisecondsSinceEpoch + i;
+          
+          elementos.add({
+            'id': nuevoId,
+            'tipo': 'foto',
+            'archivoLocal': File(imagenesAProcesar[i].path),
+            'url': '',
+            'pieFoto': '',
+            'x': 50.0 + offset, // Cascada visual
+            'y': 100.0 + offset, // Cascada visual
+            'angulo': 0.0,
+            'ancho': 150.0,
+          });
+          
+          // Dejamos seleccionada la última foto que se procesa en el bucle
+          if (i == imagenesAProcesar.length - 1) {
+            _idElementoSeleccionado = nuevoId;
+          }
+        }
       });
     }
   }
@@ -444,13 +481,8 @@ class _EditorRecuerdoPageState extends State<EditorRecuerdoPage> {
                                         if (encima != _estaEncimaDePapelera) {
                                           setState(() => _estaEncimaDePapelera = encima);
                                         }
-                                      }, 
-                                      onDelete: () => setState(() {
-                                        elementos.removeWhere((e) => e['id'] == item['id']); 
-                                        _idElementoSeleccionado = null;
-                                        _estaArrastrando = false;
-                                        _estaEncimaDePapelera = false;
-                                      }), 
+                                      },
+                                      onDelete: null, 
                                       child: _buildElemento(item), 
                                     );
 

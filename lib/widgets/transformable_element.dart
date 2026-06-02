@@ -13,7 +13,6 @@ class TransformableElement extends StatefulWidget {
   final VoidCallback onChanged;
   final VoidCallback? onDelete;
   final Function(bool) onDraggingChanged;
-  // NUEVO: Para que el padre sepa dónde está el elemento y active la papelera
   final Function(double y) onPositionChanged;
 
   const TransformableElement({
@@ -47,25 +46,18 @@ class _TransformableElementState extends State<TransformableElement> {
     super.dispose();
   }
 
-@override
+  @override
   Widget build(BuildContext context) {
     final double ancho = (widget.item['ancho'] as num? ?? 160.0).toDouble();
     final double angulo = (widget.item['angulo'] as num? ?? 0.0).toDouble();
     final double x = (widget.item['x'] as num? ?? 0.0).toDouble();
     final double y = (widget.item['y'] as num? ?? 0.0).toDouble();
 
-    // LÓGICA DE ESCALA DINÁMICA:
-    // 1. Si está en la zona de la papelera (aprox > 75% de la pantalla) y seleccionado: se encoge.
-    // 2. Si solo se está moviendo: crece un poquito (1.08).
-    // 3. Reposo: 1.0.
-    double escalaVisual = 1.0;
-    bool estaEnZonaEliminacion = y > (widget.maxHeight * 0.75);
-
-    if (widget.isSelected && estaEnZonaEliminacion && _puedeMover) {
-      escalaVisual = 0.5; // Se encoge para la papelera
-    } else if (_puedeMover) {
-      escalaVisual = 1.08; // Efecto de levante al arrastrar
-    }
+    // LÓGICA DE ESCALA DINÁMICA REPARADA:
+    // 1. Si se está moviendo: crece un poquito (1.08) para dar el efecto de levante.
+    // 2. Reposo: 1.0. 
+    // ¡Eliminada por completo la zona de encogimiento inferior (0.5)!
+    double escalaVisual = _puedeMover ? 1.08 : 1.0;
 
     return Stack(
       clipBehavior: Clip.none,
@@ -102,7 +94,7 @@ class _TransformableElementState extends State<TransformableElement> {
                   widget.item['x'] += details.focalPointDelta.dx;
                   widget.item['y'] += details.focalPointDelta.dy;
                   
-                  // Notificamos la posición para que el padre gestione la papelera
+                  // Notificamos la posición para que el padre gestione la papelera superior
                   widget.onPositionChanged(widget.item['y']);
                 }
 
@@ -131,17 +123,13 @@ class _TransformableElementState extends State<TransformableElement> {
             onScaleEnd: (details) {
               _timerDeEspera?.cancel();
 
-              if (_puedeMover && estaEnZonaEliminacion) {
-                widget.onDelete?.call();
-                HapticFeedback.vibrate(); 
-              }
+              // SE ELIMINÓ EL BLOQUE QUE LLAMABA A ONDELETE Y VIBRABA AL LLEGAR ABAJO
 
               setState(() => _puedeMover = false);
               widget.onDraggingChanged(false);
             },
             child: Transform.rotate(
               angle: angulo,
-              // Movemos el AnimatedScale para que envuelva al Container (con su borde)
               child: AnimatedScale(
                 duration: const Duration(milliseconds: 150),
                 scale: escalaVisual, 
@@ -150,20 +138,26 @@ class _TransformableElementState extends State<TransformableElement> {
                   duration: const Duration(milliseconds: 150),
                   opacity: _puedeMover ? 0.7 : 1.0,
                   child: Container(
-                    width: ancho,
-                    padding: const EdgeInsets.all(10), 
-                    decoration: widget.isSelected
-                        ? BoxDecoration(
-                            border: Border.all(
-                              color: Colors.indigo.withAlpha(150),
-                              width: 2,
-                            ),
-                            // Agregamos un fondo muy tenue para que el marco sea más visible al encogerse
-                            color: Colors.indigo.withAlpha(10), 
-                          )
-                        : null,
-                    child: widget.child,
-                  ),
+  width: ancho,
+  // 1. Forzamos el padding a cero siempre para que el contenido NUNCA cambie de tamaño
+  padding: EdgeInsets.zero, 
+  decoration: widget.isSelected
+      ? BoxDecoration(
+          border: Border.all(
+            color: Colors.indigo.withAlpha(150),
+            width: 2,
+          ),
+          // Quitamos el color de fondo para que no tape los bordes del elemento original
+          color: Colors.transparent, 
+        )
+      : null,
+  // 2. Si quieres que el borde azul tenga un aire respecto al contenido sin encogerlo, 
+  // envolvemos el child en un Padding independiente que se queda FIJO siempre:
+  child: Padding(
+    padding: const EdgeInsets.all(4), // Un respiro sutil y fijo para el borde
+    child: widget.child,
+  ),
+),
                 ),
               ),
             ),

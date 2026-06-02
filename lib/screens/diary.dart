@@ -19,7 +19,6 @@ class DiaryPage extends StatefulWidget {
 
 class _DiaryPageState extends State<DiaryPage> {
   final StorageService _storageService = StorageService();
-
   GlobalKey<PageFlipWidgetState> _pageFlipKey = GlobalKey<PageFlipWidgetState>();
 
   late Stream<QuerySnapshot> _recuerdosStream;
@@ -27,33 +26,28 @@ class _DiaryPageState extends State<DiaryPage> {
   int _totalDocs = 0;
 
   bool _estaBuscando = false;
-
   bool _saltandoAlFinal = true;
   bool _primeraCarga = true;
 
   int? _paginaAlVolver;
   String _lastDataHash = '';
   String? _hashEsperado;
-
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-
     _recuerdosStream = FirebaseFirestore.instance
         .collection('diarios')
         .doc(widget.diarioId)
         .collection('recuerdos')
         .orderBy('fecha', descending: false)
         .snapshots();
-
     ConfigController.darkModeListenable.addListener(_onThemeChanged);
   }
 
   void _onThemeChanged() {
     if (mounted) setState(() {});
-
   }
 
   @override
@@ -61,17 +55,14 @@ class _DiaryPageState extends State<DiaryPage> {
     ConfigController.darkModeListenable.removeListener(_onThemeChanged);
     _searchController.dispose();
     super.dispose();
-
   }
 
   void _ejecutarRefrescoYSalto(int pagina) {
     if (!mounted) return;
-
     setState(() {
       _saltandoAlFinal = true;
       _pageFlipKey = GlobalKey<PageFlipWidgetState>();
     });
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(milliseconds: 500), () {
         if (!mounted) return;
@@ -81,7 +72,7 @@ class _DiaryPageState extends State<DiaryPage> {
             state.goToPage(pagina);
           } catch (e) {
             debugPrint("Fallo captura PageFlip: $e");
-           }
+          }
         }
         Future.delayed(const Duration(milliseconds: 800), () {
           if (mounted) {
@@ -89,27 +80,21 @@ class _DiaryPageState extends State<DiaryPage> {
               _saltandoAlFinal = false;
               _paginaAlVolver = null;
               _hashEsperado = null;
-  
             });
           }
         });
       });
     });
-
   }
 
   void _irAlFinal() {
     if (_currentDocs.isEmpty) return;
-    final int ultimaPagina = _estaBuscando ?
-
- _totalDocs - 1 : _totalDocs;
+    final int ultimaPagina = _estaBuscando ? _totalDocs - 1 : _totalDocs;
     _ejecutarRefrescoYSalto(ultimaPagina);
   }
 
   Future<void> _abrirEditor({String? docId, Map<String, dynamic>? datosIniciales}) async {
-    final int paginaActual = _pageFlipKey.currentState?.pageNumber ??
-
- 0;
+    final int paginaActual = _pageFlipKey.currentState?.pageNumber ?? 0;
     final String? resultado = await Navigator.push<String>(
       context,
       MaterialPageRoute(
@@ -120,7 +105,6 @@ class _DiaryPageState extends State<DiaryPage> {
         ),
       ),
     );
-
     if (resultado != null) {
       setState(() {
         if (docId == null) {
@@ -131,14 +115,12 @@ class _DiaryPageState extends State<DiaryPage> {
           _hashEsperado = 'pendiente_$docId';
         }
       });
-
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final bool isDark = ConfigController.isDarkMode;
-
     final Color headerColor = ConfigController.getHeaderColor();
     const Color folioColor = Color(0xFFFFFDE7);
     const Color bgColor = Color(0xFFD7CCC8);
@@ -152,23 +134,22 @@ class _DiaryPageState extends State<DiaryPage> {
           backgroundColor: bgColor,
           appBar: AppBar(
             backgroundColor: headerColor,
-             elevation: 1,
+            elevation: 1,
             foregroundColor: Colors.white,
             iconTheme: const IconThemeData(color: Colors.white),
             title: _estaBuscando
                 ? TextField(
                     controller: _searchController,
-                     autofocus: true,
+                    autofocus: true,
                     style: const TextStyle(color: Colors.white),
                     decoration: const InputDecoration(
                       hintText: "Buscar...",
                       hintStyle: TextStyle(color: Colors.white54),
-                       border: InputBorder.none,
+                      border: InputBorder.none,
                     ),
                     onChanged: (val) => setState(() {
                       _pageFlipKey = GlobalKey<PageFlipWidgetState>();
-
-}),
+                    }),
                   )
                 : Text(
                     widget.nombreDiario,
@@ -179,31 +160,70 @@ class _DiaryPageState extends State<DiaryPage> {
                     ),
                   ),
             actions: [
-                IconButton(
+              IconButton(
                 icon: Icon(_estaBuscando ? Icons.close : Icons.search, color: Colors.white),
-                onPressed: () => setState(() {
-                  _estaBuscando = !_estaBuscando;
-                  if (!_estaBuscando) _searchController.clear();
-                   _pageFlipKey = GlobalKey<PageFlipWidgetState>();
-                }),
+                onPressed: () {
+                  if (_estaBuscando) {
+                    // --- CERRANDO BÚSQUEDA ---
+                    // 1. Identificamos en qué página de la búsqueda nos encontrábamos
+                    int paginaActual = _pageFlipKey.currentState?.pageNumber ?? 0;
+                    
+                    // 2. Recreamos momentáneamente la lista filtrada para extraer el ID de Firestore correcto
+                    final busqueda = _searchController.text.toLowerCase();
+                    final filtrados = _currentDocs.where((doc) {
+                      if (busqueda.isEmpty) return true;
+                      final data = doc.data() as Map<String, dynamic>;
+                      final fecha = DateFormat('dd/MM/yyyy').format((data['fecha'] as Timestamp).toDate());
+                      final marcador = data['marcador']?['texto']?.toString().toLowerCase() ?? '';
+                      return fecha.contains(busqueda) || marcador.contains(busqueda);
+                    }).toList();
+
+                    String? docIdActual;
+                    if (paginaActual >= 0 && paginaActual < filtrados.length) {
+                      docIdActual = filtrados[paginaActual].id;
+                    }
+
+                    // 3. Apagamos el flag de búsqueda y limpiamos el texto
+                    setState(() {
+                      _estaBuscando = false;
+                      _searchController.clear();
+                    });
+
+                    // 4. Si teníamos un recuerdo visible, buscamos su índice real en el listado total y saltamos a él
+                    if (docIdActual != null) {
+                      int indexReal = _currentDocs.indexWhere((d) => d.id == docIdActual);
+                      if (indexReal != -1) {
+                        _ejecutarRefrescoYSalto(indexReal);
+                      } else {
+                        setState(() => _pageFlipKey = GlobalKey<PageFlipWidgetState>());
+                      }
+                    } else {
+                      setState(() => _pageFlipKey = GlobalKey<PageFlipWidgetState>());
+                    }
+                  } else {
+                    // --- ABRIENDO BÚSQUEDA ---
+                    setState(() {
+                      _estaBuscando = true;
+                      // Mantenemos la _pageFlipKey intacta para que la vista no se mueva al presionar la lupa
+                    });
+                  }
+                },
               ),
               if (!_estaBuscando)
                 IconButton(
                   icon: const Icon(Icons.last_page, color: Colors.white),
-                   onPressed: _irAlFinal,
+                  onPressed: _irAlFinal,
                 ),
             ],
           ),
           body: StreamBuilder<QuerySnapshot>(
             stream: _recuerdosStream,
             builder: (context, snapshot) {
-                if (!snapshot.hasData) {
+              if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
-
-}
+              }
 
               _currentDocs = snapshot.data!.docs;
-
               final String currentHash = _currentDocs
                   .map((d) => d.id + d.data().toString().hashCode.toString())
                   .join();
@@ -214,12 +234,10 @@ class _DiaryPageState extends State<DiaryPage> {
                   final primerDoc = _currentDocs.first.data() as Map<String, dynamic>;
                   final fondo = primerDoc['fondo'] ?? 'paper';
                   final assetPath = 'assets/background/$fondo.jpg';
-
                   List<Future<void>> precargaTareas = [
                     // 1. Precargar el fondo del primer recuerdo
                     precacheImage(AssetImage(assetPath), context)
                   ];
-
                   // 2. Precargar las fotos de red que pueda tener el primer recuerdo
                   List elementos = primerDoc['elementos'] ?? [];
                   for (var item in elementos) {
@@ -246,7 +264,6 @@ class _DiaryPageState extends State<DiaryPage> {
                       _ejecutarRefrescoYSalto(0);
                     }
                   });
-
                   // MIENTRAS PRECARGA: Mostramos el loader para tapar el efecto fantasma
                   return Stack(
                     children: [
@@ -307,12 +324,10 @@ class _DiaryPageState extends State<DiaryPage> {
                 if (!_estaBuscando || _searchController.text.isEmpty) return true;
                 final data = doc.data() as Map<String, dynamic>;
                 final fecha = DateFormat('dd/MM/yyyy').format((data['fecha'] as Timestamp).toDate());
-                final marcador 
- = data['marcador']?['texto']?.toString().toLowerCase() ?? '';
+                final marcador = data['marcador']?['texto']?.toString().toLowerCase() ?? '';
                 final busqueda = _searchController.text.toLowerCase();
                 return fecha.contains(busqueda) || marcador.contains(busqueda);
               }).toList();
-
               _totalDocs = recuerdosFiltrados.length;
 
               List<Widget> hojasDelLibro = recuerdosFiltrados.map((doc) {
@@ -320,7 +335,7 @@ class _DiaryPageState extends State<DiaryPage> {
                 return Container(
                   key: ValueKey("leaf_${doc.id}_${data.toString().hashCode}"),
                   child: _buildHojaRecuerdo(doc.id, data),
-                 );
+                );
               }).toList();
 
               if (!_estaBuscando) {
@@ -329,7 +344,6 @@ class _DiaryPageState extends State<DiaryPage> {
                   key: const ValueKey("leaf_new_page"),
                   child: _buildHojaEnBlanco(),
                 ));
-
               } else if (hojasDelLibro.isEmpty) {
                 // Modo búsqueda: Solo añadimos relleno si NO se ha encontrado NADA
                 hojasDelLibro.add(Container(
@@ -337,52 +351,51 @@ class _DiaryPageState extends State<DiaryPage> {
                   color: folioColor,
                   child: Center(
                     child: Opacity(
-                        opacity: 0.2,
-                      child: Icon(Icons.menu_book, size: 50,
-                          color: isDark ? Colors.white : Colors.brown),
+                      opacity: 0.2,
+                      child: Icon(Icons.menu_book, size: 50, color: isDark ? Colors.white : Colors.brown),
                     ),
-                   ),
+                  ),
                 ));
-
               }
-              // NOTA: Si estamos buscando y SÍ hay resultados, el código no añade ninguna
-              // hoja extra al final. El libro termina en el último recuerdo exactamente.
+
               return Stack(
                 children: [
                   Positioned.fill(
                     child: Container(
                       color: folioColor,
-                       child: Opacity(
+                      child: Opacity(
                         opacity: _saltandoAlFinal ? 0.0 : 1.0,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                           onHorizontalDragEnd: (details) {
-                            if (details.primaryVelocity == null) return;
-                            int paginaActual = _pageFlipKey.currentState?.pageNumber ?? 0;
-                             if (details.primaryVelocity! < -100) {
-                              if (paginaActual < hojasDelLibro.length - 1) {
-                                _pageFlipKey.currentState?.goToPage(paginaActual + 1);
-                                }
-                            } else if (details.primaryVelocity! > 100) {
-                              if (paginaActual > 0) {
-                                 _pageFlipKey.currentState?.goToPage(paginaActual - 1);
-
-}
-                            }
-                          },
-                          child: PageFlipWidget(
-                             key: _pageFlipKey,
-                            backgroundColor: Colors.transparent,
-                            isRightSwipe: false,
-                            duration: const Duration(milliseconds: 700),
-                             lastPage: hojasDelLibro.length > 1
-                                ? hojasDelLibro.removeLast()
-                                : hojasDelLibro.first,
-                             children: hojasDelLibro,
-                          ),
-                        ),
+                        // --- SOLUCIÓN AL GLITCH DE 1 SOLA HOJA ---
+                        // Si hay 1 hoja o menos, la renderizamos de forma fija evitando inicializar el PageFlipWidget
+                        child: hojasDelLibro.length <= 1
+                            ? (hojasDelLibro.isNotEmpty ? hojasDelLibro.first : const SizedBox.shrink())
+                            : GestureDetector(
+                                behavior: HitTestBehavior.translucent,
+                                onHorizontalDragEnd: (details) {
+                                  if (details.primaryVelocity == null) return;
+                                  int paginaActual = _pageFlipKey.currentState?.pageNumber ?? 0;
+                                  if (details.primaryVelocity! < -100) {
+                                    if (paginaActual < hojasDelLibro.length - 1) {
+                                      _pageFlipKey.currentState?.goToPage(paginaActual + 1);
+                                    }
+                                  } else if (details.primaryVelocity! > 100) {
+                                    if (paginaActual > 0) {
+                                      _pageFlipKey.currentState?.goToPage(paginaActual - 1);
+                                    }
+                                  }
+                                },
+                                child: PageFlipWidget(
+                                  key: _pageFlipKey,
+                                  backgroundColor: Colors.transparent,
+                                  isRightSwipe: false,
+                                  duration: const Duration(milliseconds: 700),
+                                  // Al saber con certeza que la longitud es mayor que 1, removeLast es plenamente seguro
+                                  lastPage: hojasDelLibro.removeLast(),
+                                  children: hojasDelLibro,
+                                ),
+                              ),
                       ),
-                   ),
+                    ),
                   ),
                   if (_saltandoAlFinal)
                     Positioned.fill(
@@ -390,39 +403,35 @@ class _DiaryPageState extends State<DiaryPage> {
                         color: folioColor,
                         child: const Center(
                           child: Column(
-                             mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               CircularProgressIndicator(color: Colors.brown),
                               SizedBox(height: 20),
-                               Text("Abriendo diario...",
+                              Text("Abriendo diario...",
                                   style: TextStyle(
                                       fontFamily: 'Georgia',
                                       fontStyle: FontStyle.italic,
                                       fontSize: 16,
-                                       color: Colors.brown)),
+                                      color: Colors.brown)),
                             ],
                           ),
                         ),
-                   ),
+                      ),
                     ),
                 ],
               );
-
-},
+            },
           ),
         ),
       ),
     );
-
-}
+  }
 
   Widget _buildHojaRecuerdo(String docId, Map<String, dynamic> data) {
     List elementos = data['elementos'] ?? [];
-
     String fondo = data['fondo'] ?? 'paper';
     DateTime fechaDt = (data['fecha'] as Timestamp).toDate();
     Map<String, dynamic>? marcador = data['marcador'];
-
     return RepaintBoundary(
       child: Container(
         decoration: BoxDecoration(
@@ -433,31 +442,28 @@ class _DiaryPageState extends State<DiaryPage> {
         child: Stack(
           children: [
             Positioned.fill(
-              child: 
-
- Padding(
+              child: Padding(
                 padding: const EdgeInsets.only(top: 60),
                 child: Stack(
                   children: elementos
                       .map((item) => Positioned(
-                             left: (item['x'] as num? ?? 0.0).toDouble(),
+                            left: (item['x'] as num? ?? 0.0).toDouble(),
                             top: (item['y'] as num? ?? 0.0).toDouble(),
                             child: _buildElementoEstatico(item),
-                          
-))
+                          ))
                       .toList(),
                 ),
               ),
             ),
             if (marcador != null) _buildPostIt(marcador),
             Padding(
-               padding: const EdgeInsets.all(20.0),
+              padding: const EdgeInsets.all(20.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Padding(
                     padding: const EdgeInsets.only(left: 25.0),
-                     child: Text(
+                    child: Text(
                       DateFormat('dd/MM/yyyy').format(fechaDt),
                       style: TextStyle(
                         fontFamily: 'Georgia',
@@ -465,20 +471,19 @@ class _DiaryPageState extends State<DiaryPage> {
                         color: Colors.blueGrey[700],
                         fontSize: ConfigController.getAdaptedSize(13),
                       ),
-                     ),
+                    ),
                   ),
                   _buildMenu(docId, data, elementos),
                 ],
               ),
             ),
           ],
-         ),
+        ),
       ),
     );
+  }
 
-}
-
- Widget _buildPostIt(Map<String, dynamic> marcador) {
+  Widget _buildPostIt(Map<String, dynamic> marcador) {
     final int color = marcador['color'] ?? 0xFFFFF176;
     final String texto = marcador['texto']?.toString().toUpperCase() ?? '';
 
@@ -549,7 +554,7 @@ class _DiaryPageState extends State<DiaryPage> {
     );
   }
 
-Widget _buildElementoEstatico(Map<String, dynamic> item) {
+  Widget _buildElementoEstatico(Map<String, dynamic> item) {
     final double angulo = (item['angulo'] ?? item['rotacion'] ?? 0.0).toDouble();
     final double anchoReal = (item['ancho'] as num? ?? (item['tipo'] == 'sticker' ? 100.0 : 150.0)).toDouble();
     // TransformableElement envuelve el child con padding: EdgeInsets.all(10).
@@ -637,7 +642,6 @@ Widget _buildElementoEstatico(Map<String, dynamic> item) {
 
     // 3. SI ES TEXTO
     final double anchoTexto = (item['ancho'] ?? 200.0).toDouble();
-
     return Transform.rotate(
       angle: angulo,
       child: Padding(
@@ -661,10 +665,8 @@ Widget _buildElementoEstatico(Map<String, dynamic> item) {
     );
   }
 
-
   Widget _buildHojaEnBlanco() {
     final bool isDark = ConfigController.isDarkMode;
-
     return GestureDetector(
       onTap: () => _abrirEditor(),
       child: Container(
@@ -673,8 +675,7 @@ Widget _buildElementoEstatico(Map<String, dynamic> item) {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.edit_note, size: 80,
-                   color: isDark ? Colors.white24 : Colors.grey),
+              Icon(Icons.edit_note, size: 80, color: isDark ? Colors.white24 : Colors.grey),
               Text("Nuevo recuerdo",
                   style: TextStyle(
                       fontFamily: 'Georgia',
@@ -684,48 +685,65 @@ Widget _buildElementoEstatico(Map<String, dynamic> item) {
         ),
       ),
     );
-}
+  }
 
   Widget _buildMenu(String docId, Map<String, dynamic> data, List elementos) {
     Map<String, dynamic>? marcador = data['marcador'];
-
-    return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert, size: 20, color: Colors.black54),
-      onSelected: (val) {
-        if (val == 'edit') _abrirEditor(docId: docId, datosIniciales: data);
-        if (val == 'delete') _confirmarBorrado(docId, elementos);
-        if (val == 'marcador') _gestionMarcadorDialog(docId, marcador);
-      },
-      itemBuilder: (context) => [
-        PopupMenuItem(
-          value: 'marcador',
-           child: Row(children: [
-            Icon(marcador == null ? Icons.bookmark_add : Icons.edit_attributes,
-                color: Colors.orange),
-            const SizedBox(width: 8),
-            Text(marcador == null ? "Añadir Marcador" : "Editar Marcador"),
-          ]),
+    // Envolvemos todo en un Stack para poner la imagen de fondo
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // 1. LA IMAGEN DE FONDO
+        Image.asset(
+          'assets/appStyle/fondoEdit.png',
+          width: 38, // Ajusta este tamaño si quieres que el fondo sea más grande o pequeño
+          height: 38,
+          fit: BoxFit.contain,
         ),
-         const PopupMenuItem(
-            value: 'edit',
-            child: Row(children: [
-              Icon(Icons.edit, color: Colors.blue),
-              SizedBox(width: 8),
-              Text("Editar Hoja")
-            ])),
-        const PopupMenuItem(
-             value: 'delete',
-            child: Row(children: [
-              Icon(Icons.delete, color: Colors.red),
-              SizedBox(width: 8),
-              Text("Borrar Hoja")
-            ])),
+
+        Transform.translate(
+          // Offset(X, Y) -> X positivo mueve a la derecha, Y positivo mueve hacia abajo.
+          // Aquí lo movemos 2.5 píxeles a la derecha para centrarlo perfectamente.
+          offset: const Offset(-0.8, 0.0), 
+          child: PopupMenuButton<String>(
+            padding: EdgeInsets.zero,
+            icon: const Icon(Icons.more_vert, size: 22, color: Colors.black87),
+            onSelected: (val) {
+              if (val == 'edit') _abrirEditor(docId: docId, datosIniciales: data);
+              if (val == 'delete') _confirmarBorrado(docId, elementos);
+              if (val == 'marcador') _gestionMarcadorDialog(docId, marcador);
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'marcador',
+                child: Row(children: [
+                  Icon(marcador == null ? Icons.bookmark_add : Icons.edit_attributes, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  Text(marcador == null ? "Añadir Marcador" : "Editar Marcador"),
+                ]),
+              ),
+              const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(children: [
+                    Icon(Icons.edit, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Text("Editar Hoja")
+                  ])),
+              const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(children: [
+                    Icon(Icons.delete, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text("Borrar Hoja")
+                  ])),
+            ],
+          ),
+        ),
       ],
     );
+  }
 
-}
-
-void _confirmarBorrado(String docId, List elementos) {
+  void _confirmarBorrado(String docId, List elementos) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -735,42 +753,38 @@ void _confirmarBorrado(String docId, List elementos) {
               onPressed: () => Navigator.pop(ctx),
               child: const Text("Cancelar")),
           TextButton(
-             onPressed: () async {
+            onPressed: () async {
               Navigator.pop(ctx);
               
               // 1. PREPARAMOS EL ESTADO ANTES DE CUALQUIER AWAIT
               // Así, cuando el StreamBuilder se dispare, ya sabrá qué estamos esperando.
-               setState(() {
+              setState(() {
                 _saltandoAlFinal = true;
                 _paginaAlVolver = 0; // Volvemos a la portada tras borrar
                 _hashEsperado = 'borrado';
               });
 
               try {
-                 // 2. Borramos de Storage primero
+                // 2. Borramos de Storage primero
                 for (var item in elementos) {
-                  if ((item['tipo'] == 'foto' || item['tipo'] == 'imagen') &&
-                      item['url'] != null) {
-                     await _storageService.borrarArchivo(item['url']);
+                  if ((item['tipo'] == 'foto' || item['tipo'] == 'imagen') && item['url'] != null) {
+                    await _storageService.borrarArchivo(item['url']);
                   }
                 }
                 
                 // 3. Borramos de Firestore
                 await FirebaseFirestore.instance
                     .collection('diarios')
-                   .doc(widget.diarioId)
+                    .doc(widget.diarioId)
                     .collection('recuerdos')
                     .doc(docId)
                     .delete();
-
-} catch (e) {
+              } catch (e) {
                 // Si algo falla catastróficamente, quitamos la pantalla de carga
                 debugPrint("Error al eliminar: $e");
-
-if (mounted) {
+                if (mounted) {
                   setState(() => _saltandoAlFinal = false);
-
-}
+                }
               }
             },
             child: const Text("Eliminar", style: TextStyle(color: Colors.red)),
@@ -778,8 +792,7 @@ if (mounted) {
         ],
       ),
     );
-
-}
+  }
 
   void _gestionMarcadorDialog(String docId, Map<String, dynamic>? marcadorActual) async {
     final query = await FirebaseFirestore.instance
@@ -789,19 +802,14 @@ if (mounted) {
         .where('marcador', isNull: false)
         .limit(15)
         .get();
-
     Set<String> sugerencias = query.docs
         .map((d) => (d.data())['marcador']?['texto']?.toString() ?? '')
         .where((t) => t.isNotEmpty)
         .toSet();
-
-    TextEditingController txtCtrl =
-        TextEditingController(text: marcadorActual?['texto'] ?? "");
-
+    TextEditingController txtCtrl = TextEditingController(text: marcadorActual?['texto'] ?? "");
     final List<int> misColores = [
       0xFFFFF176, 0xFFFF8A80, 0xFF80D8FF, 0xFFCCFF90
     ];
-
     int colorSeleccionado = marcadorActual?['color'] ?? misColores[0];
 
     if (!mounted) return;
@@ -814,7 +822,7 @@ if (mounted) {
               marcadorActual == null ? "Añadir Marcador" : "Editar Marcador",
               style: const TextStyle(fontFamily: 'Georgia')),
           content: Column(
-             mainAxisSize: MainAxisSize.min,
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               TextField(
@@ -829,52 +837,42 @@ if (mounted) {
                 ),
                 textCapitalization: TextCapitalization.characters,
               ),
-              const 
- SizedBox(height: 20),
+              const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: misColores
                     .map((color) => GestureDetector(
-                          onTap: () =>
-                               setDialogState(() => colorSeleccionado = color),
+                          onTap: () => setDialogState(() => colorSeleccionado = color),
                           child: Container(
                             width: 35,
-                   height: 35,
+                            height: 35,
                             decoration: BoxDecoration(
                               color: Color(color),
-                               shape: BoxShape.circle,
+                              shape: BoxShape.circle,
                               border: Border.all(
-                                  color: colorSeleccionado == color
-                                       ?
-
- Colors.black87
-                                      : Colors.transparent,
+                                  color: colorSeleccionado == color ? Colors.black87 : Colors.transparent,
                                   width: 2),
-                             ),
+                            ),
                           ),
                         ))
                     .toList(),
               ),
-              
- if (sugerencias.isNotEmpty) ...[
+              if (sugerencias.isNotEmpty) ...[
                 const SizedBox(height: 20),
-                const Text("Sugerencias:",
-                    style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const Text("Sugerencias:", style: TextStyle(fontSize: 12, color: Colors.grey)),
                 const SizedBox(height: 8),
                 Wrap(
-                   spacing: 8,
+                  spacing: 8,
                   runSpacing: 4,
                   children: sugerencias
                       .take(5)
                       .map((s) => ActionChip(
-                            label: Text(s,
-                                style: const TextStyle(fontSize: 10)),
-                            onPressed: () =>
-                                 setDialogState(() => txtCtrl.text = s),
+                            label: Text(s, style: const TextStyle(fontSize: 10)),
+                            onPressed: () => setDialogState(() => txtCtrl.text = s),
                           ))
                       .toList(),
                 ),
-               ],
+              ],
             ],
           ),
           actionsAlignment: MainAxisAlignment.spaceBetween,
@@ -882,45 +880,36 @@ if (mounted) {
             if (marcadorActual != null)
               TextButton(
                 onPressed: () => _confirmarEliminarMarcador(docId),
-                 child: const Text("Eliminar",
-                    style: TextStyle(color: Colors.redAccent)),
+                child: const Text("Eliminar", style: TextStyle(color: Colors.redAccent)),
               ),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                 TextButton(
+                TextButton(
                     onPressed: () => Navigator.pop(ctx),
                     child: const Text("Cancelar")),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                       backgroundColor: Colors.brown),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.brown),
                   onPressed: () {
                     String nuevoTexto = txtCtrl.text.toUpperCase();
-
-if (marcadorActual != null &&
+                    if (marcadorActual != null &&
                         marcadorActual['texto'] == nuevoTexto &&
                         marcadorActual['color'] == colorSeleccionado) {
                       Navigator.pop(ctx);
-
-return;
+                      return;
                     }
                     Navigator.pop(ctx);
-
-_aplicarCambioMarcador(
-                        docId, {'texto': nuevoTexto, 'color': colorSeleccionado});
-
-},
-                  child: const Text("Guardar",
-                      style: TextStyle(color: Colors.white)),
+                    _aplicarCambioMarcador(docId, {'texto': nuevoTexto, 'color': colorSeleccionado});
+                  },
+                  child: const Text("Guardar", style: TextStyle(color: Colors.white)),
                 ),
               ],
             ),
           ],
-         ),
+        ),
       ),
     );
-
-}
+  }
 
   void _confirmarEliminarMarcador(String docId) {
     showDialog(
@@ -932,44 +921,38 @@ _aplicarCambioMarcador(
               onPressed: () => Navigator.pop(ctx),
               child: const Text("Cancelar")),
           TextButton(
-             onPressed: () {
+            onPressed: () {
               Navigator.pop(ctx);
               Navigator.pop(context);
               _aplicarCambioMarcador(docId, null);
             },
-            child: const Text("Eliminar",
-                style: TextStyle(color: Colors.red)),
-           ),
+            child: const Text("Eliminar", style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );
+  }
 
-}
-
-  void _aplicarCambioMarcador(
-      String docId, Map<String, dynamic>? data) async {
+  void _aplicarCambioMarcador(String docId, Map<String, dynamic>? data) async {
     setState(() {
       _saltandoAlFinal = true;
       _hashEsperado = 'pendiente_$docId';
       _paginaAlVolver = _pageFlipKey.currentState?.pageNumber;
     });
-
-if (data == null) {
+    if (data == null) {
       await FirebaseFirestore.instance
           .collection('diarios')
           .doc(widget.diarioId)
           .collection('recuerdos')
           .doc(docId)
           .update({'marcador': FieldValue.delete()});
-
-} else {
+    } else {
       await FirebaseFirestore.instance
           .collection('diarios')
           .doc(widget.diarioId)
           .collection('recuerdos')
           .doc(docId)
           .update({'marcador': data});
-
-}
+    }
   }
 }

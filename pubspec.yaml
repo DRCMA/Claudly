@@ -79,6 +79,7 @@ flutter:
     - assets\post-its\post-itBlue.png
     - assets\post-its\post-itYellow.png
     - assets\stickers\Nina.png
+    - assets\appStyle\fondoEdit.png
     
 flutter_icons:
   android: true
